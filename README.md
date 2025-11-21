@@ -59,3 +59,4 @@ build/testserver --cert certs/server.pem --key certs/server.key --port 50443 --p
 ```
 
 Using the browser of you choice, visit: [https://localhost:50443](https://localhost:50443) to see it in action.
+Using the browser of you choice, visit: [https://javi.es:50443](https://localhost:50443) to see it in action. (CERTS)
