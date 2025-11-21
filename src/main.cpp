@@ -66,7 +66,6 @@ class Basic_Credentials_Manager final : public Botan::Credentials_Manager {
          const std::vector<Botan::X509_DN>& acceptable_cas,
          const std::string& type,
          const std::string& hostname) override {
-         BOTAN_UNUSED(cert_signature_schemes);
 
          const auto cred = std::ranges::find_if(m_creds, [&](const auto& cred) {
             return std::ranges::any_of(algos, [&](const auto& algo) { return algo == cred.key->algo_name(); }) &&
