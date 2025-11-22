@@ -7,11 +7,12 @@ project(testserver)
 add_library(Botan::Botan STATIC IMPORTED)
 set_target_properties(Botan::Botan
                       PROPERTIES
-                        INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/3rdparty/botan/build/include
-                        IMPORTED_LOCATION             ${CMAKE_SOURCE_DIR}/3rdparty/botan/libbotan-3.a)
+                        INTERFACE_INCLUDE_DIRECTORIES /usr/local/include/botan-3/
+                        IMPORTED_LOCATION             /usr/local/lib/libbotan-3.a)
 
 set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost 1.80.0 REQUIRED program_options)
+find_package(Boost 1.80.0 REQUIRED json)
 
 add_executable(${PROJECT_NAME}
                src/ocsp_cache.h
