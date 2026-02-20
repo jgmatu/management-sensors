@@ -1,0 +1,8 @@
+# mlkem_only.txt
+allow_tls12 = false
+allow_tls13 = true
+
+# Use ONLY ML-KEM-768 (standardized name)
+# Note: In some Botan versions, the identifier might be 'ML-KEM-768' 
+# or 'x25519/ML-KEM-768' if you want the hybrid NIST-recommended path.
+key_exchange_groups = ML-KEM-768
