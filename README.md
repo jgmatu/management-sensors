@@ -58,11 +58,10 @@ $ botan tls_client localhost --port=50443  --trusted-cas=certs/
 Certificate validation status: Verified
 Handshake complete, TLS v1.3
 Negotiated ciphersuite CHACHA20_POLY1305_SHA256
-Key exchange using x25519/ML-KEM-768
-Session ID 6998D0090C22723F5A028668B83CC237D82CFB008AABF0DCF7542363F49CD5D0
+Key exchange using ML-KEM-768
+Session ID 6998D4160565DE617358FC56EEF2227127931BA0CD8B4A93103B1DF6B39FDD9D
 Handshake complete
 
-Now, it's time to start the server application:
 ```
 
 ```bash
