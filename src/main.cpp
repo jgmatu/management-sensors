@@ -528,7 +528,7 @@ net::awaitable<void> do_session(tcp_stream stream,
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
                 
                 // Log connection details once (optional)
-                // std::cout << callbacks->collect_connection_details_as_json() << std::endl;
+                std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
                 // Echo back to client
                 co_await net::async_write(tls_stream, net::buffer(buffer.data(), n));

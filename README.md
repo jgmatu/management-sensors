@@ -45,15 +45,16 @@ described above, from the repository's root run:
 ```bash
 mkdir certs
 
-3rdparty/botan/botan keygen --algo=ECDSA --params=secp384r1 --output=certs/ca.key
-3rdparty/botan/botan keygen --algo=ECDSA --params=secp384r1 --output=certs/server.key
-3rdparty/botan/botan gen_self_signed --ca --country=DE --dns=localhost --hash=SHA-384 --output=certs/ca.pem certs/ca.key localhost
-3rdparty/botan/botan gen_pkcs10 --output=certs/server.req certs/server.key localhost
-3rdparty/botan/botan sign_cert --output=certs/server.pem certs/ca.pem certs/ca.key certs/server.req
+botan keygen --algo=ECDSA --params=secp384r1 --output=certs/ca.key
+botan keygen --algo=ECDSA --params=secp384r1 --output=certs/server.key
+botan gen_self_signed --ca --country=DE --dns=localhost --hash=SHA-384 --output=certs/ca.pem certs/ca.key localhost
+botan gen_pkcs10 --output=certs/server.req certs/server.key localhost
+botan sign_cert --output=certs/server.pem certs/ca.pem certs/ca.key certs/server.req
 ```
 
 ## Example echo TLS v1.3 echo client
-botan tls_client localhost --port=50443  --trusted-cas=certs/
+```bash
+$ botan tls_client localhost --port=50443  --trusted-cas=certs/ 
 Certificate validation status: Verified
 Handshake complete, TLS v1.3
 Negotiated ciphersuite CHACHA20_POLY1305_SHA256
@@ -62,6 +63,7 @@ Session ID 6998D0090C22723F5A028668B83CC237D82CFB008AABF0DCF7542363F49CD5D0
 Handshake complete
 
 Now, it's time to start the server application:
+```
 
 ```bash
 build/testserver --cert certs/server.pem --key certs/server.key --port 50443 --policy policies/pqc_basic.txt
