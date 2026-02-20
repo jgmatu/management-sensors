@@ -11,8 +11,7 @@ set_target_properties(Botan::Botan
                         IMPORTED_LOCATION             /usr/local/lib/libbotan-3.a)
 
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost 1.80.0 REQUIRED program_options)
-find_package(Boost 1.80.0 REQUIRED json)
+find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 
 add_executable(${PROJECT_NAME}
                src/ocsp_cache.h

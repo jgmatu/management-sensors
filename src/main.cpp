@@ -192,7 +192,7 @@ auto make_final_completion_handler(const std::string& context)
             {
                 const auto now = std::chrono::system_clock::now();
                 const std::time_t t_c =
-                    std::chrono::system_clock::to_time_t(now);
+                std::chrono::system_clock::to_time_t(now);
                 std::cerr << std::ctime(&t_c) << " " << context << ": "
                           << ex.what() << std::endl;
             }
@@ -360,6 +360,8 @@ http::message_generator handle_request(
     http::request<Body, http::basic_fields<Allocator>>&& req,
     beast::string_view doc_root)
 {
+    std::cout << " HANDLE REQUEST!!! " << std::endl;
+
     // Make sure we can handle the method
     if (req.method() != http::verb::get && req.method() != http::verb::head)
     {
@@ -434,6 +436,7 @@ http::message_generator handle_api_request(
     return not_found(req);
 }
 
+#ifdef HTTPS
 net::awaitable<void> do_session(tcp_stream stream,
                                 std::shared_ptr<Botan::TLS::Context> tls_ctx,
                                 std::shared_ptr<OCSP_Cache> ocsp_cache,
@@ -444,14 +447,15 @@ net::awaitable<void> do_session(tcp_stream stream,
 
     // Set up Botan's TLS stack
     auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
-    Botan::TLS::Stream<tcp_stream> tls_stream(std::move(stream),
-                                              std::move(tls_ctx), callbacks);
+    Botan::TLS::Stream<tcp_stream> tls_stream(std::move(stream), std::move(tls_ctx), callbacks);
 
     try
     {
         // Perform a TLS handshake with the peer
         co_await tls_stream.async_handshake(
             Botan::TLS::Connection_Side::Server);
+
+        std::cout << " HANDSHAKE!!! " << std::endl;
 
         for (;;)
         {
@@ -460,6 +464,8 @@ net::awaitable<void> do_session(tcp_stream stream,
 
             // Read a request
             http::request<http::string_body> req;
+
+            std::cout << " READ REQUEST!!! " << std::endl;
             co_await http::async_read(tls_stream, buffer, req);
 
             // Handle the request
@@ -469,6 +475,8 @@ net::awaitable<void> do_session(tcp_stream stream,
 
             // Send the response
             const auto keep_alive = response.keep_alive();
+
+            std::cout << " WRITE REPONSE!!! " << std::endl;
             co_await beast::async_write(tls_stream, std::move(response),
                                         net::use_awaitable);
 
@@ -498,31 +506,92 @@ net::awaitable<void> do_session(tcp_stream stream,
     // we ignore the error because the client might have
     // dropped the connection already.
 }
-
-net::awaitable<void> do_listen(tcp::endpoint endpoint,
-                               std::shared_ptr<Botan::TLS::Context> tls_ctx,
-                               std::shared_ptr<OCSP_Cache> ocsp_cache,
-                               std::string_view document_root)
-{
-    auto acceptor = net::use_awaitable.as_default_on(
-        tcp::acceptor(co_await net::this_coro::executor));
-    acceptor.open(endpoint.protocol());
-    acceptor.set_option(net::socket_base::reuse_address(true));
-    acceptor.bind(endpoint);
-    acceptor.listen(net::socket_base::max_listen_connections);
-
-    // If max_clients is zero in the beginning, we'll serve forever
-    // otherwise we'll count down and stop eventually.
-    for (;;)
+#else
+    net::awaitable<void> do_session(
+        tcp_stream stream,
+        std::shared_ptr<Botan::TLS::Context> ctx,
+        std::shared_ptr<OCSP_Cache> ocsp_cache)
     {
-        boost::asio::co_spawn(
-            acceptor.get_executor(),
-            do_session(tcp_stream(co_await acceptor.async_accept()), tls_ctx,
-                       ocsp_cache, document_root),
-            make_final_completion_handler("Session"));
-    }
-}
+        // TlsHttpCallbacks is still needed for OCSP and logging handshake details
+        auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
 
+        // Botan::Stream has a constructor that takes the Context directly
+        Botan::TLS::Stream<tcp_stream&> tls_stream(stream, ctx, callbacks);
+
+        try {
+            co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
+
+            // TCP LAYER: Read/Write Loop
+            std::vector<uint8_t> buffer(4096);
+            for (;;) {
+                // Read raw decrypted bytes
+                size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
+                
+                // Log connection details once (optional)
+                // std::cout << callbacks->collect_connection_details_as_json() << std::endl;
+
+                // Echo back to client
+                co_await net::async_write(tls_stream, net::buffer(buffer.data(), n));
+            }
+        }
+        catch (const std::exception& e) {
+            // Handle EOF or handshake failures gracefully
+        }
+    }
+#endif
+
+#ifdef HTTPS
+    net::awaitable<void> do_listen(tcp::endpoint endpoint,
+                                std::shared_ptr<Botan::TLS::Context> tls_ctx,
+                                std::shared_ptr<OCSP_Cache> ocsp_cache,
+                                std::string_view document_root)
+    {
+        auto acceptor = net::use_awaitable.as_default_on(
+            tcp::acceptor(co_await net::this_coro::executor));
+        acceptor.open(endpoint.protocol());
+        acceptor.set_option(net::socket_base::reuse_address(true));
+        acceptor.bind(endpoint);
+        acceptor.listen(net::socket_base::max_listen_connections);
+
+        // If max_clients is zero in the beginning, we'll serve forever
+        // otherwise we'll count down and stop eventually.
+        for (;;)
+        {
+            std::cout << " LISTEN!!! " << std::endl;
+
+            boost::asio::co_spawn(
+                acceptor.get_executor(),
+                do_session(tcp_stream(co_await acceptor.async_accept()), tls_ctx,
+                        ocsp_cache, document_root),
+                make_final_completion_handler("Session"));
+        }
+    }
+#else
+    net::awaitable<void> do_listen(
+        tcp::endpoint endpoint,
+        std::shared_ptr<Botan::TLS::Context> tls_ctx,
+        std::shared_ptr<OCSP_Cache> ocsp_cache,
+        std::string_view /* document_root */) 
+    {
+        // 1. Get the current executor from the coroutine context
+        auto exec = co_await net::this_coro::executor;
+
+        // 2. Use the executor to create the acceptor
+        tcp::acceptor acceptor(exec, endpoint);
+
+        for (;;)
+        {
+            // 3. Accept the new connection
+            auto socket = co_await acceptor.async_accept();
+
+            // 4. Spawn the session using the retrieved executor 'exec'
+            net::co_spawn(
+                exec,
+                do_session(tcp_stream(std::move(socket)), tls_ctx, ocsp_cache),
+                make_final_completion_handler("session"));
+        }
+    }
+#endif
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -594,10 +663,13 @@ int main(int argc, char* argv[])
         std::vector<std::jthread> threads;
         for (size_t i = 2; i <= num_threads; ++i)
         {
+            std::cout << "Threads! " << i << std::endl;
             threads.emplace_back([&io]() { io.run(); });
         }
 
+        std::cout << "RUN!!! " << std::endl;
         io.run();
+        std::cout << "END!!! " << std::endl;
     }
     catch (const std::exception& ex)
     {

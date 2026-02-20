@@ -52,6 +52,15 @@ mkdir certs
 3rdparty/botan/botan sign_cert --output=certs/server.pem certs/ca.pem certs/ca.key certs/server.req
 ```
 
+## Example echo TLS v1.3 echo client
+botan tls_client localhost --port=50443  --trusted-cas=certs/
+Certificate validation status: Verified
+Handshake complete, TLS v1.3
+Negotiated ciphersuite CHACHA20_POLY1305_SHA256
+Key exchange using x25519/ML-KEM-768
+Session ID 6998D0090C22723F5A028668B83CC237D82CFB008AABF0DCF7542363F49CD5D0
+Handshake complete
+
 Now, it's time to start the server application:
 
 ```bash
