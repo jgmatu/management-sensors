@@ -54,7 +54,7 @@ botan sign_cert --output=certs/server.pem certs/ca.pem certs/ca.key certs/server
 
 ## Example echo TLS v1.3 echo client
 ```bash
-$ botan tls_client localhost --port=50443  --trusted-cas=certs/ 
+$ botan tls_client localhost --port=50443 --policy=./policies/client_policies.txt --trusted-cas=certs/
 Certificate validation status: Verified
 Handshake complete, TLS v1.3
 Negotiated ciphersuite CHACHA20_POLY1305_SHA256
