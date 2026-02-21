@@ -522,16 +522,24 @@ net::awaitable<void> do_session(tcp_stream stream,
             co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
 
             // TCP LAYER: Read/Write Loop
-            std::vector<uint8_t> buffer(4096);
+            std::vector<uint8_t> buffer(16);
             for (;;) {
                 // Read raw decrypted bytes
+                std::cout << " ASYNC READ START! " << std::endl;
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
-                
+                std::cout << " ASYNC READ DONE! " << std::endl;
+
+                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
+
                 // Log connection details once (optional)
                 std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
                 // Echo back to client
+                std::cout << " ASYNC READ START! " << std::endl;
                 co_await net::async_write(tls_stream, net::buffer(buffer.data(), n));
+                std::cout << " ASYNC WRITE DONE! " << std::endl;
+
+                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
             }
         }
         catch (const std::exception& e) {
@@ -576,6 +584,7 @@ net::awaitable<void> do_session(tcp_stream stream,
         // 1. Get the current executor from the coroutine context
         auto exec = co_await net::this_coro::executor;
 
+        std::cout << "Executor!" << std::endl;
         // 2. Use the executor to create the acceptor
         tcp::acceptor acceptor(exec, endpoint);
 
@@ -583,6 +592,7 @@ net::awaitable<void> do_session(tcp_stream stream,
         {
             // 3. Accept the new connection
             auto socket = co_await acceptor.async_accept();
+            std::cout << "Accept!!" << std::endl;
 
             // 4. Spawn the session using the retrieved executor 'exec'
             net::co_spawn(
