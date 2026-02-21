@@ -4,7 +4,7 @@
 
 for i in {1..100}; do
   expect -c "
-    spawn botan tls_client localhost --port=50443 --trusted-cas=certs/
+    spawn botan tls_client localhost --port=50443 --trusted-cas=certs/ --policy=./policies/client_policies.txt
     expect \"Handshake complete\"
     send \"ping $i\r\"
     expect \"ping $i\"
