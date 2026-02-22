@@ -536,10 +536,13 @@ net::awaitable<void> do_session(tcp_stream stream,
                 // Log connection details once (optional)
                 std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
-                // Echo back to client
-                std::cout << " ASYNC READ START! " << std::endl;
-                co_await net::async_write(tls_stream, net::buffer(buffer.data(), n));
-                std::cout << " ASYNC WRITE DONE! " << std::endl;
+                // Echo back to client using the TLS stream's native async send
+                std::cout << " ASYNC WRITE START! " << std::endl;
+
+                // Use the stream's member function instead of the free function net::async_write
+                size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
+
+                std::cout << " ASYNC WRITE DONE! (" << bytes_sent << " bytes sent)" << std::endl;
 
                 std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
             }
