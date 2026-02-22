@@ -518,12 +518,14 @@ net::awaitable<void> do_session(tcp_stream stream,
         // Botan::Stream has a constructor that takes the Context directly
         Botan::TLS::Stream<tcp_stream&> tls_stream(stream, ctx, callbacks);
 
-        try {
+        try
+        {
             co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
 
             // TCP LAYER: Read/Write Loop
             std::vector<uint8_t> buffer(16);
-            for (;;) {
+            for (;;)
+            {
                 // Read raw decrypted bytes
                 std::cout << " ASYNC READ START! " << std::endl;
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
@@ -542,7 +544,8 @@ net::awaitable<void> do_session(tcp_stream stream,
                 std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             // Handle EOF or handshake failures gracefully
         }
     }
