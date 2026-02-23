@@ -520,7 +520,9 @@ net::awaitable<void> do_session(tcp_stream stream,
 
         try
         {
+            std::cout << "Wait handshake message event!" << std::endl;
             co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
+            std::cout << "Handshake finalize go to data stream in tls channel!" << std::endl;
 
             // TCP LAYER: Read/Write Loop
             std::vector<uint8_t> buffer(16);
@@ -538,10 +540,7 @@ net::awaitable<void> do_session(tcp_stream stream,
 
                 // Echo back to client using the TLS stream's native async send
                 std::cout << " ASYNC WRITE START! " << std::endl;
-
-                // Use the stream's member function instead of the free function net::async_write
                 size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
-
                 std::cout << " ASYNC WRITE DONE! (" << bytes_sent << " bytes sent)" << std::endl;
 
                 std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
@@ -588,19 +587,22 @@ net::awaitable<void> do_session(tcp_stream stream,
         std::string_view /* document_root */) 
     {
         // 1. Get the current executor from the coroutine context
+        std::cout << "WAIT EXECUTOR READY!" << std::endl;
         auto exec = co_await net::this_coro::executor;
 
         std::cout << "Executor!" << std::endl;
+
         // 2. Use the executor to create the acceptor
         tcp::acceptor acceptor(exec, endpoint);
 
         for (;;)
         {
             // 3. Accept the new connection
+            std::cout << "WAIT TO ACCEPT!!" << std::endl;
             auto socket = co_await acceptor.async_accept();
-            std::cout << "Accept!!" << std::endl;
 
             // 4. Spawn the session using the retrieved executor 'exec'
+            std::cout << "Spawn async task and wait again to accept connection again!" << std::endl;
             net::co_spawn(
                 exec,
                 do_session(tcp_stream(std::move(socket)), tls_ctx, ocsp_cache),
@@ -663,18 +665,22 @@ int main(int argc, char* argv[])
         const auto num_threads = std::thread::hardware_concurrency();
         net::io_context io{static_cast<int>(num_threads)};
         auto address = net::ip::make_address("0.0.0.0");
+
+        std::cout << "Spawn bind connection in async task and go to next code!" << std::endl;
         boost::asio::co_spawn(
             io,
             do_listen(
                 tcp::endpoint{address, port},
-                std::make_shared<Botan::TLS::Context>(creds, rng, session_mgr,
-                                                      tls_policy),
+                std::make_shared<Botan::TLS::Context>(creds, rng, session_mgr, tls_policy),
                 std::make_shared<OCSP_Cache>(
                     std::chrono::minutes(vm["ocsp-cache-time"].as<uint64_t>()),
                     std::chrono::seconds(
                         vm["ocsp-request-timeout"].as<uint64_t>())),
                 document_root),
             make_final_completion_handler("Acceptor"));
+
+        // Add thread pool to IO context asio scheduler.
+        std::cout << "Add thread pool to IO context asio scheduler." << std::endl;
 
         std::vector<std::jthread> threads;
         for (size_t i = 2; i <= num_threads; ++i)
