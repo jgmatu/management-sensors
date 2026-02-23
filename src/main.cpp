@@ -665,7 +665,7 @@ int main(int argc, char* argv[])
         auto tls_policy = load_tls_policy(policy);
 
         const auto num_threads = std::thread::hardware_concurrency();
-        net::io_context io{static_cast<int>(num_threads)};
+        net::io_context io{static_cast<int>(num_threads + 1)};
         auto address = net::ip::make_address("0.0.0.0");
 
         std::cout << "Spawn bind connection in async task and go to next code!" << std::endl;
@@ -693,7 +693,7 @@ int main(int argc, char* argv[])
 
         std::cout << "IO RUN MAIN THREAD!" << std::endl;
         io.run();
-        std::cout << "END!!! " << std::endl;
+        std::cout << "IO RUN JOIN END!!! " << std::endl;
     }
     catch (const std::exception& ex)
     {
