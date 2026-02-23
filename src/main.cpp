@@ -585,8 +585,7 @@ net::awaitable<void> do_session(tcp_stream stream,
     net::awaitable<void> do_listen(
         tcp::endpoint endpoint,
         std::shared_ptr<Botan::TLS::Context> tls_ctx,
-        std::shared_ptr<OCSP_Cache> ocsp_cache,
-        std::string_view /* document_root */) 
+        std::shared_ptr<OCSP_Cache> ocsp_cache) 
     {
         // 1. Get the current executor from the coroutine context
         std::cout << "WAIT EXECUTOR READY!" << std::endl;
@@ -655,7 +654,9 @@ int main(int argc, char* argv[])
         const auto policy = vm["policy"].as<std::string>();
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
+#ifdef HTTPS
         const auto document_root = vm["document-root"].as<std::string>();
+#endif
 
         auto creds =
             std::make_shared<Basic_Credentials_Manager>(certificate, key);
@@ -669,6 +670,7 @@ int main(int argc, char* argv[])
         auto address = net::ip::make_address("0.0.0.0");
 
         std::cout << "Spawn bind connection in async task and go to next code!" << std::endl;
+#ifdef HTTPS
         boost::asio::co_spawn(
             io,
             do_listen(
@@ -676,10 +678,23 @@ int main(int argc, char* argv[])
                 std::make_shared<Botan::TLS::Context>(creds, rng, session_mgr, tls_policy),
                 std::make_shared<OCSP_Cache>(
                     std::chrono::minutes(vm["ocsp-cache-time"].as<uint64_t>()),
-                    std::chrono::seconds(
-                        vm["ocsp-request-timeout"].as<uint64_t>())),
+                    std::chrono::seconds(vm["ocsp-request-timeout"].as<uint64_t>())),
                 document_root),
-            make_final_completion_handler("Acceptor"));
+            make_final_completion_handler("Acceptor")
+        );
+#else
+        boost::asio::co_spawn(
+            io,
+            do_listen(
+                tcp::endpoint{address, port},
+                std::make_shared<Botan::TLS::Context>(creds, rng, session_mgr, tls_policy),
+                std::make_shared<OCSP_Cache>(
+                    std::chrono::minutes(vm["ocsp-cache-time"].as<uint64_t>()),
+                    std::chrono::seconds(vm["ocsp-request-timeout"].as<uint64_t>()))
+            ),
+            make_final_completion_handler("Acceptor")
+        );
+#endif
 
         // Add thread pool to IO context asio scheduler.
         std::cout << "Add thread pool to IO context asio scheduler." << std::endl;
