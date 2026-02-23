@@ -533,7 +533,8 @@ net::awaitable<void> do_session(tcp_stream stream,
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
                 std::cout << " ASYNC READ DONE! " << std::endl;
 
-                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
+                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+                std::cout << std::endl;
 
                 // Log connection details once (optional)
                 std::cout << callbacks->collect_connection_details_as_json() << std::endl;
@@ -543,7 +544,8 @@ net::awaitable<void> do_session(tcp_stream stream,
                 size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
                 std::cout << " ASYNC WRITE DONE! (" << bytes_sent << " bytes sent)" << std::endl;
 
-                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< int>(std::cout, "\n"));
+                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+                std::cout << std::endl;
             }
         }
         catch (const std::exception& e)
@@ -683,13 +685,13 @@ int main(int argc, char* argv[])
         std::cout << "Add thread pool to IO context asio scheduler." << std::endl;
 
         std::vector<std::jthread> threads;
-        for (size_t i = 2; i <= num_threads; ++i)
+        for (size_t i = 0; i < num_threads; ++i)
         {
             std::cout << "Threads! " << i << std::endl;
             threads.emplace_back([&io]() { io.run(); });
         }
 
-        std::cout << "RUN!!! " << std::endl;
+        std::cout << "IO RUN MAIN THREAD!" << std::endl;
         io.run();
         std::cout << "END!!! " << std::endl;
     }
