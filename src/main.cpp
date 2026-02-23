@@ -557,11 +557,9 @@ net::awaitable<void> do_session(tcp_stream stream,
             // Handle EOF or handshake failures gracefully
         }
 
-        std::cout << "Clean shutdown connection!" << std::endl;
         // Shut down the connection gracefully
         co_await tls_stream.async_shutdown();
-        beast::error_code ec;
-        tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send, ec);
+        tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send);
 
         // At this point the connection is closed gracefully
         // we ignore the error because the client might have
