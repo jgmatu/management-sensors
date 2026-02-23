@@ -32,6 +32,8 @@
 
 #include "ocsp_cache.h"
 
+// #define HTTPS
+
 namespace
 {
 
@@ -452,10 +454,9 @@ net::awaitable<void> do_session(tcp_stream stream,
     try
     {
         // Perform a TLS handshake with the peer
-        co_await tls_stream.async_handshake(
-            Botan::TLS::Connection_Side::Server);
-
-        std::cout << " HANDSHAKE!!! " << std::endl;
+        std::cout << "Wait handshake message event!" << std::endl;
+        co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
+        std::cout << "Handshake finalize go to data stream in tls channel!" << std::endl;
 
         for (;;)
         {
@@ -477,8 +478,7 @@ net::awaitable<void> do_session(tcp_stream stream,
             const auto keep_alive = response.keep_alive();
 
             std::cout << " WRITE REPONSE!!! " << std::endl;
-            co_await beast::async_write(tls_stream, std::move(response),
-                                        net::use_awaitable);
+            co_await beast::async_write(tls_stream, std::move(response), net::use_awaitable);
 
             // Determine if we should close the connection
             if (!keep_alive)
@@ -528,6 +528,9 @@ net::awaitable<void> do_session(tcp_stream stream,
             std::vector<uint8_t> buffer(16);
             for (;;)
             {
+                // Set the timeout.
+                tls_stream.next_layer().expires_after(std::chrono::seconds(30));
+
                 // Read raw decrypted bytes
                 std::cout << " ASYNC READ START! " << std::endl;
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
@@ -550,8 +553,19 @@ net::awaitable<void> do_session(tcp_stream stream,
         }
         catch (const std::exception& e)
         {
+            std::cout << e.what() << std::endl;
             // Handle EOF or handshake failures gracefully
         }
+
+        std::cout << "Clean shutdown connection!" << std::endl;
+        // Shut down the connection gracefully
+        co_await tls_stream.async_shutdown();
+        beast::error_code ec;
+        tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send, ec);
+
+        // At this point the connection is closed gracefully
+        // we ignore the error because the client might have
+        // dropped the connection already.
     }
 #endif
 
@@ -561,22 +575,23 @@ net::awaitable<void> do_session(tcp_stream stream,
                                 std::shared_ptr<OCSP_Cache> ocsp_cache,
                                 std::string_view document_root)
     {
-        auto acceptor = net::use_awaitable.as_default_on(
-            tcp::acceptor(co_await net::this_coro::executor));
-        acceptor.open(endpoint.protocol());
-        acceptor.set_option(net::socket_base::reuse_address(true));
-        acceptor.bind(endpoint);
-        acceptor.listen(net::socket_base::max_listen_connections);
-
+        auto exec = co_await net::this_coro::executor;
+        tcp::acceptor acceptor(exec, endpoint);
+ 
         // If max_clients is zero in the beginning, we'll serve forever
         // otherwise we'll count down and stop eventually.
         for (;;)
         {
-            std::cout << " LISTEN!!! " << std::endl;
+            // 3. Accept the new connection
+            std::cout << "WAIT TO ACCEPT!!" << std::endl;
+            auto socket = co_await acceptor.async_accept();
+
+            // 4. Spawn the session using the retrieved executor 'exec'
+            std::cout << "Spawn async task and wait again to accept connection again!" << std::endl;
 
             boost::asio::co_spawn(
                 acceptor.get_executor(),
-                do_session(tcp_stream(co_await acceptor.async_accept()), tls_ctx,
+                do_session(tcp_stream(std::move(socket)), tls_ctx,
                         ocsp_cache, document_root),
                 make_final_completion_handler("Session"));
         }
@@ -607,7 +622,8 @@ net::awaitable<void> do_session(tcp_stream stream,
             net::co_spawn(
                 exec,
                 do_session(tcp_stream(std::move(socket)), tls_ctx, ocsp_cache),
-                make_final_completion_handler("session"));
+                make_final_completion_handler("session")
+            );
         }
     }
 #endif
@@ -654,6 +670,7 @@ int main(int argc, char* argv[])
         const auto policy = vm["policy"].as<std::string>();
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
+
 #ifdef HTTPS
         const auto document_root = vm["document-root"].as<std::string>();
 #endif
