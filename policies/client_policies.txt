@@ -2,6 +2,8 @@
 allow_tls12 = false
 allow_tls13 = true
 
+ciphers = ChaCha20Poly1305 AES-256/GCM AES-128/GCM AES-128/CCM AES-128/CCM(8)
+
 # Use ONLY ML-KEM-768 (standardized name)
 # Note: In some Botan versions, the identifier might be 'ML-KEM-768' 
 # or 'x25519/ML-KEM-768' if you want the hybrid NIST-recommended path.
