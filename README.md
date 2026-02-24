@@ -27,17 +27,14 @@ assume that it is available on your system.
 
 ## Co routines C++20
 
-``` https://lewissbaker.github.io/ ```
+``` bash
+https://lewissbaker.github.io/
+```
 
 ```bash
-git submodule init
-git submodule update
-
-(cd 3rdparty/botan; ./configure.py --with-boost --without-documentation --disable-shared-library)
-(cd 3rdparty/botan; make -j8 libs cli)
-
-cmake -B build -S .
-make -C build
+Install boost and botan libraries from sources:
+  - https://www.boost.org/
+  - https://botan.randombit.net/
 ```
 
 ## Run
