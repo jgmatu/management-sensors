@@ -31,6 +31,8 @@ assume that it is available on your system.
 https://lewissbaker.github.io/
 ```
 
+## Dependencies
+
 ```bash
 Install boost and botan libraries from sources:
   - https://www.boost.org/
