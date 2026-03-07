@@ -104,9 +104,6 @@ void DatabaseManager::listen_async(const std::string& channel,
             // The lambda receives a pqxx::notification object containing:
             // .channel, .payload, and .backend_pid
             connection_->listen("events", [this, callback] (pqxx::notification n) {
-                std::cout << "Received notification on channel: " << n.channel << std::endl;
-                std::cout << "Payload: " << n.payload << std::endl;
-
                 boost::json::object msg;
                 parser_notify(n, msg); // Parse payload into JSON if possible
                 callback(msg);
