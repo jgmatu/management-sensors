@@ -113,7 +113,7 @@ void DatabaseManager::listen_async(const std::string& channel,
             // await_notification() blocks until a notification arrives or a timeout occurs
             for (;;)
             {
-                std::cout << "Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)" << std::endl;
+                std::cout << "Waiting for notifications..." << std::endl;
                 connection_->await_notification();
             }
         }
