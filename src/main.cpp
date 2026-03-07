@@ -752,8 +752,9 @@ int main(int argc, char* argv[])
             "keepalives_count=3"        // Número de fallos antes de cerrar la conexión
         );
         db.connect();
+
         boost::json::object sanity_info = db.get_sanity_info();
-        JsonUtils::print(std::  cout, sanity_info);
+        JsonUtils::print(std::cout, sanity_info);
         std::cout << std::endl;
 
         std::cout << "SERVER READY!" << std::endl;
