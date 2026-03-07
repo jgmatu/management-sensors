@@ -1,4 +1,6 @@
 #include <testserver/DatabaseManager.hpp>
+#include <libpq-fe.h> // Raw libpq header
+#include <poll.h>      // For non-blocking wait
 
 DatabaseManager::DatabaseManager(const std::string& connection_str) 
         : conn_str_(connection_str) {}
@@ -40,10 +42,6 @@ boost::json::object DatabaseManager::get_sanity_info()
     boost::json::object info;
     try
     {
-        if (!connection_ || !connection_->is_open()) {
-            connect(); 
-        }
-
         pqxx::nontransaction ntxn(*connection_);
 
         // 1. Get PostgreSQL Server Version
@@ -74,4 +72,58 @@ boost::json::object DatabaseManager::get_sanity_info()
         info["error"] = e.what();
         return info;
     }
+}
+
+
+void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::object& msg)
+{
+    msg["channel"] = n.channel.c_str();
+    try
+    {
+        // Parse the stringified payload into a JSON value
+        msg["payload"] = boost::json::parse(n.payload.c_str());
+    }
+    catch (const std::exception& e)
+    {
+        // Fallback: if it's not valid JSON, store it as a raw string
+        msg["payload"] = n.payload.c_str();
+    }
+}
+
+void DatabaseManager::listen_async(const std::string& channel, 
+                                  std::function<void(boost::json::object)> callback)
+{
+    std::cout << "Starting async listener for channel: " << channel << std::endl;
+
+    std::jthread([this, channel, callback](std::stop_token st) {
+        try
+        {
+            std::cout << "Waiting for trigger..." << std::endl;
+
+            // 2. Register the handler
+            // The lambda receives a pqxx::notification object containing:
+            // .channel, .payload, and .backend_pid
+            connection_->listen("events", [this, callback] (pqxx::notification n) {
+                std::cout << "Received notification on channel: " << n.channel << std::endl;
+                std::cout << "Payload: " << n.payload << std::endl;
+
+                boost::json::object msg;
+                parser_notify(n, msg); // Parse payload into JSON if possible
+                callback(msg);
+            });
+
+            // 3. Enter a loop to wait for notifications
+            // await_notification() blocks until a notification arrives or a timeout occurs
+            for (;;)
+            {
+                std::cout << "Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)" << std::endl;
+                connection_->await_notification();
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Connection failed: " << e.what() << std::endl;
+            throw;
+        }
+    }).detach();
 }

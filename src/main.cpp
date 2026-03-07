@@ -747,8 +747,8 @@ int main(int argc, char* argv[])
             "sslmode=verify-full "      // Fuerza SSL y verifica el certificado del servidor
             "sslrootcert=" DATABASE_CERT " " // Ruta al certificado de la CA (opcional según modo)
             "keepalives=1 "             // Activa Keep-Alive a nivel de TCP
-            "keepalives_idle=10 "       // Segundos antes de enviar el primer keepalive
-            "keepalives_interval=2 "    // Segundos entre reintentos si no hay respuesta
+            "keepalives_idle=60 "       // Segundos antes de enviar el primer keepalive
+            "keepalives_interval=5 "    // Segundos entre reintentos si no hay respuesta
             "keepalives_count=3"        // Número de fallos antes de cerrar la conexión
         );
         db.connect();
@@ -756,6 +756,14 @@ int main(int argc, char* argv[])
         boost::json::object sanity_info = db.get_sanity_info();
         JsonUtils::print(std::cout, sanity_info);
         std::cout << std::endl;
+
+        std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
+        db.listen_async("events", [](boost::json::object msg)
+        {
+            std::cout << "Received notification on channel: " << msg["channel"].as_string() << ": " << std::endl;
+            JsonUtils::print(std::cout, msg);
+            std::cout << std::endl;
+        });
 
         std::cout << "SERVER READY!" << std::endl;
         io.run();

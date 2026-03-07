@@ -27,10 +27,14 @@ public:
 
     boost::json::object get_sanity_info();
 
-    void listen_async(const std::string& channel, std::function<void(std::string)> callback);
+    void parser_notify(const pqxx::notification& n, boost::json::object& msg);
+
+    void listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
 
 private:
     std::string conn_str_;
     std::unique_ptr<pqxx::connection> connection_;
-    std::stop_source listener_stop_source_; // C++20 stop token
+    std::thread listener_thread_;
+    bool stop_listener_ = false;
+    std::function<void(boost::json::object)> notification_callback_;
 };
