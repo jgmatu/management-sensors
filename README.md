@@ -75,7 +75,7 @@ build/testserver --cert certs/server.pem --key certs/server.key --port 50443 --p
 Using the browser of you choice, visit: [https://localhost:50443](https://localhost:50443) to see it in action.
 Using the browser of you choice, visit: [https://javi.es:50443](https://localhost:50443) to see it in action. (CERTS)
 
-## PostgreSQL example pipiline output stream
+## PostgreSQL example pipeline output stream
 ```
 Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
 Received notification on channel: events
