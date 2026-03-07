@@ -30,9 +30,12 @@
 #include <botan/tls_session_manager_memory.h>
 #include <botan/version.h>
 
-#include "ocsp_cache.h"
+#include <testserver/ocsp_cache.hpp>
+#include <testserver/DatabaseManager.hpp>
+#include <testserver/JsonUtils.hpp>
 
-// #define HTTPS
+#define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/certs/ca.pem"
+#define HTTPS
 
 namespace
 {
@@ -362,8 +365,6 @@ http::message_generator handle_request(
     http::request<Body, http::basic_fields<Allocator>>&& req,
     beast::string_view doc_root)
 {
-    std::cout << " HANDLE REQUEST!!! " << std::endl;
-
     // Make sure we can handle the method
     if (req.method() != http::verb::get && req.method() != http::verb::head)
     {
@@ -454,10 +455,8 @@ net::awaitable<void> do_session(tcp_stream stream,
     try
     {
         // Perform a TLS handshake with the peer
-        std::cout << "Wait handshake message event!" << std::endl;
         co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
-        std::cout << "Handshake finalize go to data stream in tls channel!" << std::endl;
-
+ 
         for (;;)
         {
             // Set the timeout.
@@ -466,7 +465,6 @@ net::awaitable<void> do_session(tcp_stream stream,
             // Read a request
             http::request<http::string_body> req;
 
-            std::cout << " READ REQUEST!!! " << std::endl;
             co_await http::async_read(tls_stream, buffer, req);
 
             // Handle the request
@@ -477,7 +475,6 @@ net::awaitable<void> do_session(tcp_stream stream,
             // Send the response
             const auto keep_alive = response.keep_alive();
 
-            std::cout << " WRITE REPONSE!!! " << std::endl;
             co_await beast::async_write(tls_stream, std::move(response), net::use_awaitable);
 
             // Determine if we should close the connection
@@ -520,10 +517,8 @@ net::awaitable<void> do_session(tcp_stream stream,
 
         try
         {
-            std::cout << "Wait handshake message event!" << std::endl;
             co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
-            std::cout << "Handshake finalize go to data stream in tls channel!" << std::endl;
-
+ 
             // TCP LAYER: Read/Write Loop
             std::vector<uint8_t> buffer(16);
             for (;;)
@@ -532,20 +527,16 @@ net::awaitable<void> do_session(tcp_stream stream,
                 tls_stream.next_layer().expires_after(std::chrono::seconds(30));
 
                 // Read raw decrypted bytes
-                std::cout << " ASYNC READ START! " << std::endl;
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
-                std::cout << " ASYNC READ DONE! " << std::endl;
-
-                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+ 
+                std::copy(buffer.begin(), buffer.enocsp_cache.cppd(), std::ostream_iterator< char>(std::cout, " "));
                 std::cout << std::endl;
 
                 // Log connection details once (optional)
                 std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
                 // Echo back to client using the TLS stream's native async send
-                std::cout << " ASYNC WRITE START! " << std::endl;
                 size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
-                std::cout << " ASYNC WRITE DONE! (" << bytes_sent << " bytes sent)" << std::endl;
 
                 std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
                 std::cout << std::endl;
@@ -581,7 +572,6 @@ net::awaitable<void> do_session(tcp_stream stream,
         for (;;)
         {
             // 3. Accept the new connection
-            std::cout << "WAIT TO ACCEPT!!" << std::endl;
             auto socket = co_await acceptor.async_accept();
 
             // 4. Spawn the session using the retrieved executor 'exec'
@@ -601,10 +591,7 @@ net::awaitable<void> do_session(tcp_stream stream,
         std::shared_ptr<OCSP_Cache> ocsp_cache) 
     {
         // 1. Get the current executor from the coroutine context
-        std::cout << "WAIT EXECUTOR READY!" << std::endl;
         auto exec = co_await net::this_coro::executor;
-
-        std::cout << "Executor!" << std::endl;
 
         // 2. Use the executor to create the acceptor
         tcp::acceptor acceptor(exec, endpoint);
@@ -612,7 +599,6 @@ net::awaitable<void> do_session(tcp_stream stream,
         for (;;)
         {
             // 3. Accept the new connection
-            std::cout << "WAIT TO ACCEPT!!" << std::endl;
             auto socket = co_await acceptor.async_accept();
 
             // 4. Spawn the session using the retrieved executor 'exec'
@@ -626,6 +612,39 @@ net::awaitable<void> do_session(tcp_stream stream,
     }
 #endif
 }  // namespace
+
+static void pretty_print(std::ostream& os, boost::json::value const& jv, std::string indent = "")
+{
+    switch (jv.kind()) {
+        case boost::json::kind::object: {
+            os << "{\n";
+            auto const& obj = jv.get_object();
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                os << indent << "  " << boost::json::serialize(it->key()) << " : ";
+                pretty_print(os, it->value(), indent + "  ");
+                if (std::next(it) != obj.end()) os << ",";
+                os << "\n";
+            }
+            os << indent << "}";
+            break;
+        }
+        case boost::json::kind::array: {
+            os << "[\n";
+            auto const& arr = jv.get_array();
+            for (auto it = arr.begin(); it != arr.end(); ++it) {
+                os << indent << "  ";
+                pretty_print(os, *it, indent + "  ");
+                if (std::next(it) != arr.end()) os << ",";
+                os << "\n";
+            }
+            os << indent << "]";
+            break;
+        }
+        default:
+            os << boost::json::serialize(jv);
+            break;
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -712,18 +731,34 @@ int main(int argc, char* argv[])
 #endif
 
         // Add thread pool to IO context asio scheduler.
-        std::cout << "Add thread pool to IO context asio scheduler." << std::endl;
-
         std::vector<std::jthread> threads;
         for (size_t i = 0; i < num_threads; ++i)
         {
-            std::cout << "Threads! " << i << std::endl;
             threads.emplace_back([&io]() { io.run(); });
         }
 
-        std::cout << "IO RUN MAIN THREAD!" << std::endl;
+        // Ejemplo con SSL requerido y Keep-Alive activo
+        DatabaseManager db(
+            "dbname=javi "
+            "user=javi "
+            "password=12345678 "
+            "host=localhost "
+            "port=5432 "
+            "sslmode=verify-full "      // Fuerza SSL y verifica el certificado del servidor
+            "sslrootcert=" DATABASE_CERT " " // Ruta al certificado de la CA (opcional según modo)
+            "keepalives=1 "             // Activa Keep-Alive a nivel de TCP
+            "keepalives_idle=10 "       // Segundos antes de enviar el primer keepalive
+            "keepalives_interval=2 "    // Segundos entre reintentos si no hay respuesta
+            "keepalives_count=3"        // Número de fallos antes de cerrar la conexión
+        );
+        db.connect();
+        boost::json::object sanity_info = db.get_sanity_info();
+        JsonUtils::print(std::  cout, sanity_info);
+        std::cout << std::endl;
+
+        std::cout << "SERVER READY!" << std::endl;
         io.run();
-        std::cout << "IO RUN JOIN END!!! " << std::endl;
+        std::cout << "SERVER SHUTDOWN!" << std::endl;
     }
     catch (const std::exception& ex)
     {

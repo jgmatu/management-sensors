@@ -1,3 +1,50 @@
-.cache
-build
-certs
+# --- Compiled Binaries & Objects ---
+*.o
+*.obj
+*.so
+*.a
+*.lib
+*.dll
+*.exe
+bin/
+lib/
+
+# --- CMake & Build Directories ---
+# Ignore the entire build folder where you run ninja
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+*.ninja
+*.ninja_deps
+*.ninja_log
+
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.clang-format
+.clangd/
+
+# --- Debugging & Core Dumps ---
+gmon.out
+core
+*.core
+vgcore.*
+*.dSYM/
+
+# --- Project Specific (Testserver / Wireshark) ---
+# Ignore generated ASN.1 dissectors or temporary certs
+run/
+docs/
+*.log
+*.pcap
+*.pcapng
+
+# --- PostgreSQL Source Artifacts (if submoduled) ---
+tmp_check/

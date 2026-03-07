@@ -4,11 +4,14 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/local/include/botan-3/"
+                "/usr/local/include/botan-3/",
+                "/usr/local/include/"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
-            "intelliSenseMode": "linux-gcc-x64"
+            "intelliSenseMode": "linux-gcc-x64",
+            "cppStandard": "gnu++20",
+            "cStandard": "c17"
         }
     ],
     "version": 4

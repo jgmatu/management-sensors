@@ -4,8 +4,7 @@
  * (C) 2024 René Fischer, René Meusel
  */
 
-#ifndef OCSP_CACHE_H
-#define OCSP_CACHE_H
+#pragma once
 
 #include <chrono>
 #include <map>
@@ -60,5 +59,3 @@ class OCSP_Cache
     std::chrono::minutes m_cache_duration;
     std::chrono::seconds m_ocsp_request_timeout;
 };
-
-#endif

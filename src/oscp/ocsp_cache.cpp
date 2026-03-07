@@ -4,7 +4,7 @@
  * (C) 2024 René Fischer, René Meusel
  */
 
-#include "ocsp_cache.h"
+#include <testserver/ocsp_cache.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
