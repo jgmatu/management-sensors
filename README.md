@@ -74,3 +74,60 @@ build/testserver --cert certs/server.pem --key certs/server.key --port 50443 --p
 
 Using the browser of you choice, visit: [https://localhost:50443](https://localhost:50443) to see it in action.
 Using the browser of you choice, visit: [https://javi.es:50443](https://localhost:50443) to see it in action. (CERTS)
+
+## PostgreSQL example pipiline output stream
+```
+Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+Received notification on channel: events
+Payload: {"id": 71, "op": "UPDATE", "name": "cafe", "stock": 7432}
+Received notification on channel: "events": 
+{
+  "channel" : "events",
+  "payload" : {
+    "id" : 71,
+    "op" : "UPDATE",
+    "name" : "cafe",
+    "stock" : 7432
+  }
+}
+Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+Received notification on channel: events
+Payload: {"id": 71, "op": "UPDATE", "name": "cafe", "stock": 7433}
+Received notification on channel: "events": 
+{
+  "channel" : "events",
+  "payload" : {
+    "id" : 71,
+    "op" : "UPDATE",
+    "name" : "cafe",
+    "stock" : 7433
+  }
+}
+Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+Received notification on channel: events
+Payload: {"id": 71, "op": "UPDATE", "name": "cafe", "stock": 7434}
+Received notification on channel: "events": 
+{
+  "channel" : "events",
+  "payload" : {
+    "id" : 71,
+    "op" : "UPDATE",
+    "name" : "cafe",
+    "stock" : 7434
+  }
+}
+Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+Received notification on channel: events
+Payload: {"id": 71, "op": "UPDATE", "name": "cafe", "stock": 7435}
+Received notification on channel: "events": 
+{
+  "channel" : "events",
+  "payload" : {
+    "id" : 71,
+    "op" : "UPDATE",
+    "name" : "cafe",
+    "stock" : 7435
+  }
+}
+Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+```
