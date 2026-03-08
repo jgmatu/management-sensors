@@ -159,7 +159,7 @@ void DatabaseManager::listen_async(const std::string& channel,
         catch (const std::exception& e)
         {
             std::cerr << "Connection failed: " << e.what() << std::endl;
-            throw;
+            // throw;
         }
     }).detach();
 }

@@ -35,3 +35,31 @@
 2026-03-08 04:38:29.726 CET [5931] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
 2026-03-08 04:38:40.381 CET [7422] LOG:  could not send data to client: Tubería rota
 2026-03-08 04:38:40.381 CET [7422] FATAL:  connection to client lost
+2026-03-08 04:41:46.233 CET [6681] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:41:46.233 CET [6681] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:41:58.425 CET [4446] LOG:  checkpoint starting: time
+2026-03-08 04:42:00.437 CET [4446] LOG:  checkpoint complete: wrote 20 buffers (0.1%), wrote 7 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=2.004 s, sync=0.005 s, total=2.013 s; sync files=18, longest=0.003 s, average=0.001 s; distance=927 kB, estimate=927 kB; lsn=0/3351360, redo lsn=0/3347EE8
+2026-03-08 04:42:45.211 CET [4442] LOG:  received fast shutdown request
+2026-03-08 04:42:45.217 CET [4442] LOG:  aborting any active transactions
+2026-03-08 04:42:45.217 CET [21451] FATAL:  terminating connection due to administrator command
+2026-03-08 04:42:45.218 CET [4442] LOG:  background worker "logical replication launcher" (PID 4451) exited with exit code 1
+2026-03-08 04:42:45.219 CET [4446] LOG:  shutting down
+2026-03-08 04:42:45.220 CET [4446] LOG:  checkpoint starting: shutdown immediate
+2026-03-08 04:42:45.226 CET [4446] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.003 s, total=0.008 s; sync files=2, longest=0.003 s, average=0.002 s; distance=172 kB, estimate=851 kB; lsn=0/33731D8, redo lsn=0/33731D8
+2026-03-08 04:42:45.234 CET [4442] LOG:  database system is shut down
+2026-03-08 04:43:07.322 CET [25844] LOG:  starting PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit
+2026-03-08 04:43:07.323 CET [25844] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-08 04:43:07.323 CET [25844] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-08 04:43:07.325 CET [25844] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2026-03-08 04:43:07.329 CET [25850] LOG:  database system was shut down at 2026-03-08 04:42:45 CET
+2026-03-08 04:43:07.332 CET [25844] LOG:  database system is ready to accept connections
+2026-03-08 04:43:15.896 CET [26463] FATAL:  lock file "postmaster.pid" already exists
+2026-03-08 04:43:15.896 CET [26463] HINT:  Is another postmaster (PID 25844) running in data directory "/usr/local/pgsql/data"?
+2026-03-08 04:43:17.573 CET [25844] LOG:  received fast shutdown request
+2026-03-08 04:43:17.578 CET [25844] LOG:  aborting any active transactions
+2026-03-08 04:43:17.579 CET [25889] FATAL:  terminating connection due to administrator command
+2026-03-08 04:43:17.580 CET [25844] LOG:  background worker "logical replication launcher" (PID 25853) exited with exit code 1
+2026-03-08 04:43:17.580 CET [25848] LOG:  shutting down
+2026-03-08 04:43:17.581 CET [25848] LOG:  checkpoint starting: shutdown immediate
+2026-03-08 04:43:17.586 CET [25848] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.002 s, total=0.006 s; sync files=3, longest=0.001 s, average=0.001 s; distance=33 kB, estimate=33 kB; lsn=0/337B8F0, redo lsn=0/337B8F0
+2026-03-08 04:43:17.593 CET [25844] LOG:  database system is shut down
