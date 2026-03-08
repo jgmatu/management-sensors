@@ -24,7 +24,7 @@ BEGIN
   );
 
   -- Changed channel from 'articles_channel' to 'events'
-  PERFORM pg_notify('events', payload::text);
+  PERFORM pg_notify('articles_channel', payload::text);
 
   RETURN NULL;
 END; $$ LANGUAGE plpgsql;

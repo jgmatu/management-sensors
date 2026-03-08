@@ -98,12 +98,21 @@ void DatabaseManager::listen_async(const std::string& channel,
     std::jthread([this, channel, callback](std::stop_token st) {
         try
         {
+            if (!connection_ || !connection_->is_open()) {
+                throw std::runtime_error("Database connection is not established.");
+            }
+
+            // 1. Force the LISTEN command immediately
+            pqxx::nontransaction nt(*connection_);
+            nt.exec("LISTEN " + channel + ";");
+            nt.commit(); // Nontransactions don't strictly need this, but it ensures execution
+
             std::cout << "Waiting for trigger..." << std::endl;
 
             // 2. Register the handler
             // The lambda receives a pqxx::notification object containing:
             // .channel, .payload, and .backend_pid
-            connection_->listen("events", [this, callback] (pqxx::notification n) {
+            connection_->listen(channel, [this, callback] (pqxx::notification n) {
                 boost::json::object msg;
                 parser_notify(n, msg); // Parse payload into JSON if possible
                 callback(msg);
