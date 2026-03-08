@@ -9958,3 +9958,5 @@
 2026-03-08 04:22:49.059 CET [243217] STATEMENT:  UPDATE articles SET stock_count = stock_count + 1 WHERE name = 'balloons';
 2026-03-08 04:23:12.275 CET [243436] LOG:  SSL error: unexpected eof while reading
 2026-03-08 04:23:12.275 CET [243436] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:24:07.727 CET [244428] LOG:  could not send data to client: Tubería rota
+2026-03-08 04:24:07.727 CET [244428] FATAL:  connection to client lost

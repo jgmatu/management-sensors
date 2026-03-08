@@ -123,7 +123,7 @@ void DatabaseManager::listen_async(const std::string& channel,
             int sock = connection_->sock(); // Get the underlying Postgres socket
 
             while (!st.stop_requested()) {
-                // Use poll() to wait for data on the socket with a 1s timeout
+                // Use poll() to wait for data on the socket with infinite timeout (-1)
                 // This blocks completely (0% CPU) but wakes up for stop_token checks
                 struct pollfd pfd = { .fd = sock, .events = POLLIN };
 
