@@ -161,5 +161,5 @@ void DatabaseManager::listen_async(const std::string& channel,
             std::cerr << "Connection failed: " << e.what() << std::endl;
             // throw;
         }
-    }).detach();
+    }).detach(); // Detach the thread to run independently
 }
