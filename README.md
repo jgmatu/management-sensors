@@ -77,7 +77,20 @@ Using the browser of you choice, visit: [https://javi.es:50443](https://localhos
 
 ## PostgreSQL example pipeline output stream
 ```
-Waiting for notifications... (Run 'NOTIFY events, 'hello';' in psql)
+Spawn bind connection in async task and go to next code!
+Connected to: javi
+{
+  "postgres_version" : "PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit",
+  "ssl_active" : true,
+  "ssl_cipher" : "TLS_AES_256_GCM_SHA384",
+  "ssl_protocol" : "TLSv1.3",
+  "libpq_compile_version" : "8.0.0-rc5"
+}
+Starting async listener for PostgreSQL notifications...
+Starting async listener for channel: events
+SERVER READY!
+Waiting for trigger...
+Waiting for notifications...
 Received notification on channel: events
 Payload: {"id": 71, "op": "UPDATE", "name": "cafe", "stock": 7432}
 Received notification on channel: "events": 
