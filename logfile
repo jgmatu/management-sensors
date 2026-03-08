@@ -1,0 +1,37 @@
+2026-03-08 04:34:58.734 CET [387487] LOG:  starting PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit
+2026-03-08 04:34:58.734 CET [387487] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-08 04:34:58.734 CET [387487] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-08 04:34:58.736 CET [387487] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2026-03-08 04:34:58.740 CET [387498] LOG:  database system was shut down at 2026-03-08 04:34:48 CET
+2026-03-08 04:34:58.740 CET [387499] FATAL:  the database system is starting up
+2026-03-08 04:34:58.742 CET [387501] FATAL:  the database system is starting up
+2026-03-08 04:34:58.742 CET [387487] LOG:  database system is ready to accept connections
+2026-03-08 04:35:05.662 CET [388147] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:35:05.662 CET [388147] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:35:09.606 CET [390474] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:35:09.607 CET [390474] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:35:13.247 CET [391594] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:35:32.530 CET [387487] LOG:  received fast shutdown request
+2026-03-08 04:35:32.537 CET [387487] LOG:  aborting any active transactions
+2026-03-08 04:35:32.538 CET [397334] FATAL:  the database system is shutting down
+2026-03-08 04:35:32.538 CET [387487] LOG:  background worker "logical replication launcher" (PID 387505) exited with exit code 1
+2026-03-08 04:35:32.538 CET [387496] LOG:  shutting down
+2026-03-08 04:35:32.540 CET [387496] LOG:  checkpoint starting: shutdown immediate
+2026-03-08 04:35:32.540 CET [397336] FATAL:  the database system is shutting down
+2026-03-08 04:35:32.542 CET [397338] FATAL:  the database system is shutting down
+2026-03-08 04:35:32.545 CET [387496] LOG:  checkpoint complete: wrote 2 buffers (0.0%), wrote 5 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.002 s, total=0.007 s; sync files=4, longest=0.002 s, average=0.001 s; distance=479 kB, estimate=479 kB; lsn=0/32601C0, redo lsn=0/32601C0
+2026-03-08 04:35:32.552 CET [387487] LOG:  database system is shut down
+2026-03-08 04:36:58.328 CET [4442] LOG:  starting PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit
+2026-03-08 04:36:58.329 CET [4442] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-08 04:36:58.329 CET [4442] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-08 04:36:58.331 CET [4442] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2026-03-08 04:36:58.339 CET [4448] LOG:  database system was shut down at 2026-03-08 04:35:32 CET
+2026-03-08 04:36:58.348 CET [4442] LOG:  database system is ready to accept connections
+2026-03-08 04:37:15.234 CET [4486] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:37:15.234 CET [4486] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:37:53.359 CET [5820] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:37:53.359 CET [5820] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:38:29.726 CET [5931] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:38:29.726 CET [5931] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:38:40.381 CET [7422] LOG:  could not send data to client: Tubería rota
+2026-03-08 04:38:40.381 CET [7422] FATAL:  connection to client lost

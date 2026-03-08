@@ -1,6 +1,6 @@
 #include <testserver/DatabaseManager.hpp>
 #include <libpq-fe.h> // Raw libpq header
-#include <poll.h>      // For non-blocking wait
+#include <sys/epoll.h>
 
 DatabaseManager::DatabaseManager(const std::string& connection_str) 
         : conn_str_(connection_str) {}
@@ -80,7 +80,7 @@ void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::ob
     msg["channel"] = n.channel.c_str();
     try
     {
-        // Parse the stringified payload into a JSON value
+        // Parse the stringified payload into #include <sys/epoll.h>a JSON value
         msg["payload"] = boost::json::parse(n.payload.c_str());
     }
     catch (const std::exception& e)
@@ -95,11 +95,24 @@ void DatabaseManager::listen_async(const std::string& channel,
 {
     std::cout << "Starting async listener for channel: " << channel << std::endl;
 
-    std::jthread([this, channel, callback](std::stop_token st) {
+    std::jthread([this, channel, callback](std::stop_token st)
+    {
+        int epoll_fd = -1;
+
         try
         {
             if (!connection_ || !connection_->is_open()) {
                 throw std::runtime_error("Database connection is not established.");
+            }
+
+            // 1. Setup Epoll
+            epoll_fd = epoll_create1(0);
+            struct epoll_event ev, events[1];
+            ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+            ev.data.fd = connection_->sock();
+
+            if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, connection_->sock(), &ev) == -1) {
+                throw std::runtime_error("Failed to add socket to epoll");
             }
 
             // 1. Force the LISTEN command immediately
@@ -122,20 +135,25 @@ void DatabaseManager::listen_async(const std::string& channel,
             // await_notification() blocks until a notification arrives or a timeout occurs
             int sock = connection_->sock(); // Get the underlying Postgres socket
 
-            while (!st.stop_requested()) {
-                // Use poll() to wait for data on the socket with infinite timeout (-1)
-                // This blocks completely (0% CPU) but wakes up for stop_token checks
-                struct pollfd pfd = { .fd = sock, .events = POLLIN };
+            for (;;) {
+                // -1 means block forever until data or error
+                std::cout << "Waiting for epoll events since socket: " << sock << std::endl;
+                int nfds = epoll_wait(epoll_fd, events, 1, -1);
 
-                std::cout << "Waiting for notifications on socket " << sock << "..." << std::endl;
-                int sel = poll(&pfd, 1, -1); // Wait indefinitely until data is available or an error occurs
-
-                if (sel > 0) {
-                    std::cout << "Notification received, processing..." << std::endl;
-                    connection_->await_notification(); 
-                } else if (sel < 0 && errno != EINTR) {
-                    throw std::runtime_error("Socket error in listener");
+                if (nfds < 0) {
+                    if (errno == EINTR) continue;
+                    throw std::runtime_error("Epoll wait failed");
                 }
+
+                // Check for socket errors reported by epoll
+                if (events[0].events & (EPOLLERR | EPOLLHUP)) {
+                    throw std::runtime_error("Database socket hung up or error");
+                }
+
+                // Data available: let libpqxx process it
+                // If the connection is broken, this will throw pqxx::broken_connection
+                std::cout << "Notification received, processing..." << std::endl;
+                connection_->await_notification();
             }
         }
         catch (const std::exception& e)

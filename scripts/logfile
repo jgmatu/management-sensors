@@ -9960,3 +9960,21 @@
 2026-03-08 04:23:12.275 CET [243436] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
 2026-03-08 04:24:07.727 CET [244428] LOG:  could not send data to client: Tubería rota
 2026-03-08 04:24:07.727 CET [244428] FATAL:  connection to client lost
+2026-03-08 04:25:33.275 CET [243541] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:25:33.276 CET [243541] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:27:00.630 CET [244584] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:27:12.924 CET [14231] LOG:  checkpoint starting: time
+2026-03-08 04:27:13.631 CET [14231] LOG:  checkpoint complete: wrote 7 buffers (0.0%), wrote 6 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.702 s, sync=0.002 s, total=0.707 s; sync files=6, longest=0.002 s, average=0.001 s; distance=1148 kB, estimate=2806 kB; lsn=0/2BD4240, redo lsn=0/2BD1600
+2026-03-08 04:32:12.730 CET [14231] LOG:  checkpoint starting: time
+2026-03-08 04:32:13.438 CET [14231] LOG:  checkpoint complete: wrote 7 buffers (0.0%), wrote 20 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.702 s, sync=0.003 s, total=0.708 s; sync files=6, longest=0.002 s, average=0.001 s; distance=4116 kB, estimate=4116 kB; lsn=0/2FDF078, redo lsn=0/2FD6810
+2026-03-08 04:34:03.595 CET [371997] LOG:  SSL error: unexpected eof while reading
+2026-03-08 04:34:03.595 CET [371997] LOG:  could not receive data from client: Conexión reinicializada por la máquina remota
+2026-03-08 04:34:48.468 CET [14227] LOG:  received fast shutdown request
+2026-03-08 04:34:48.469 CET [14227] LOG:  aborting any active transactions
+2026-03-08 04:34:48.469 CET [375300] FATAL:  terminating connection due to administrator command
+2026-03-08 04:34:48.470 CET [14227] LOG:  background worker "logical replication launcher" (PID 14237) exited with exit code 1
+2026-03-08 04:34:48.470 CET [14231] LOG:  shutting down
+2026-03-08 04:34:48.472 CET [14231] LOG:  checkpoint starting: shutdown immediate
+2026-03-08 04:34:48.478 CET [14231] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 11 SLRU buffers; 0 WAL file(s) added, 0 removed, 1 recycled; write=0.001 s, sync=0.002 s, total=0.008 s; sync files=4, longest=0.001 s, average=0.001 s; distance=2118 kB, estimate=3916 kB; lsn=0/31E8280, redo lsn=0/31E8280
+2026-03-08 04:34:48.481 CET [384827] FATAL:  the database system is shutting down
+2026-03-08 04:34:48.486 CET [14227] LOG:  database system is shut down

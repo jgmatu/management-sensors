@@ -35,6 +35,6 @@ FOR EACH ROW EXECUTE FUNCTION articles_notify();
 
 -- Seed with some initial data
 INSERT INTO articles (name, stock_count) VALUES
-  ('cafe', 50),
-  ('balloons', 100),
-  ('espresso', 25) ON CONFLICT (name) DO NOTHING;
+  ('cafe', 0),
+  ('balloons', 0),
+  ('espresso', 0) ON CONFLICT (name) DO NOTHING;
