@@ -104,23 +104,12 @@ void DatabaseManager::listen_async(const std::string& channel,
             if (!connection_ || !connection_->is_open()) {
                 throw std::runtime_error("Database connection is not established.");
             }
-
-            // 1. Setup Epoll
-            epoll_fd = epoll_create1(0);
-            struct epoll_event ev, events[1];
-            ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
-            ev.data.fd = connection_->sock();
-
-            if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, connection_->sock(), &ev) == -1) {
-                throw std::runtime_error("Failed to add socket to epoll");
-            }
+            int sock = connection_->sock(); // Get the underlying Postgres socket
 
             // 1. Force the LISTEN command immediately
             pqxx::nontransaction nt(*connection_);
             nt.exec("LISTEN " + channel + ";");
             nt.commit(); // Nontransactions don't strictly need this, but it ensures execution
-
-            std::cout << "Waiting for trigger..." << std::endl;
 
             // 2. Register the handler
             // The lambda receives a pqxx::notification object containing:
@@ -131,12 +120,22 @@ void DatabaseManager::listen_async(const std::string& channel,
                 callback(msg);
             });
 
-            // 3. Enter a loop to wait for notifications
+            // 3. Setup Epoll
+            epoll_fd = epoll_create1(0);
+            struct epoll_event ev, events[1];
+            ev.events = EPOLLIN | EPOLLERR | EPOLLHUP;
+            ev.data.fd = sock;
+
+            if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock, &ev) == -1) {
+                throw std::runtime_error("Failed to add socket to epoll");
+            }
+
+            // 4. Enter a loop to wait for notifications
             // await_notification() blocks until a notification arrives or a timeout occurs
-            int sock = connection_->sock(); // Get the underlying Postgres socket
 
             for (;;) {
                 // -1 means block forever until data or error
+                std::cout << "Waiting for trigger..." << std::endl;
                 std::cout << "Waiting for epoll events since socket: " << sock << std::endl;
                 int nfds = epoll_wait(epoll_fd, events, 1, -1);
 
