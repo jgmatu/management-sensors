@@ -120,10 +120,22 @@ void DatabaseManager::listen_async(const std::string& channel,
 
             // 3. Enter a loop to wait for notifications
             // await_notification() blocks until a notification arrives or a timeout occurs
-            for (;;)
-            {
-                std::cout << "Waiting for notifications..." << std::endl;
-                connection_->await_notification();
+            int sock = connection_->sock(); // Get the underlying Postgres socket
+
+            while (!st.stop_requested()) {
+                // Use poll() to wait for data on the socket with a 1s timeout
+                // This blocks completely (0% CPU) but wakes up for stop_token checks
+                struct pollfd pfd = { .fd = sock, .events = POLLIN };
+
+                std::cout << "Waiting for notifications on socket " << sock << "..." << std::endl;
+                int sel = poll(&pfd, 1, -1); // Wait indefinitely until data is available or an error occurs
+
+                if (sel > 0) {
+                    std::cout << "Notification received, processing..." << std::endl;
+                    connection_->await_notification(); 
+                } else if (sel < 0 && errno != EINTR) {
+                    throw std::runtime_error("Socket error in listener");
+                }
             }
         }
         catch (const std::exception& e)
