@@ -1,29 +1,90 @@
+/* 
+=============================================================================
+SISTEMA:     Infraestructura de Datos para 100 CPUs (Nodos de Computación)
+DESCRIPCIÓN: Base de Datos RELACIONAL, REACTIVA y SEGURA 
+MOTOR:       PostgreSQL 16+ (Optimizado para RHEL 10)
+=============================================================================
+
+LÓGICA RELACIONAL (Jerarquía de Datos):
+1. [CAPA DE SEGURIDAD] sensor_certs: 
+   - Raíz de confianza y gestión de identidades X.509 (Formato PEM).
+   - Control de ciclo de vida: Fingerprint, caducidad y revocación.
+   
+2. [CAPA DE IDENTIDAD] sensor_config: 
+   - Vínculo lógico-físico de la red. 
+   - Asocia cada nodo con su direccionamiento IP y su certificado activo.
+   
+3. [CAPA DE ESTADO] sensor_state: 
+   - Almacén de telemetría efímera. 
+   - Optimizado para mantener exclusivamente el último valor de temperatura 
+     por nodo, garantizando consultas de estado actual en tiempo constante.
+
+ARQUITECTURA REACTIVA (Mecanismo NOTIFY/LISTEN):
+Esta base de datos opera bajo un modelo 'Event-Driven' (Dirigido por Eventos). 
+No requiere consultas periódicas para detectar cambios; en su lugar, utiliza 
+disparadores (Triggers) internos que emiten notificaciones asíncronas en 
+canales aislados ante cualquier alteración de los datos:
+
+- cert_events:   Notificaciones de seguridad (Inserción, Revocación o Borrado).
+- config_events: Cambios en la topología de red o configuración de nodos.
+- state_events:  Actualizaciones de telemetría en tiempo real.
+
+NOTA FINAL SOBRE INTEGRIDAD:
+El sistema implementa integridad referencial estricta. El borrado en cascada 
+(ON DELETE CASCADE) asegura la limpieza automática de registros de estado 
+y telemetría ante la eliminación de nodos o certificados, manteniendo la 
+consistencia del esquema sin intervención externa.
+=============================================================================
+*/
+
 -- ==========================================================
 -- 1. LIMPIEZA TOTAL (DROP)
 -- ==========================================================
 -- Borrar Triggers y Funciones
+DROP TRIGGER IF EXISTS trg_sensor_cert_notify ON sensor_certs;
 DROP TRIGGER IF EXISTS trg_sensor_config_notify ON sensor_config;
 DROP TRIGGER IF EXISTS trg_sensor_state_notify ON sensor_state;
 DROP FUNCTION IF EXISTS notify_config_change();
 DROP FUNCTION IF EXISTS notify_state_change();
 
 -- Borrar Tablas (Orden inverso por Foreign Keys)
+-- 1.1. Primero la tabla de telemetría (depende de config)
 DROP TABLE IF EXISTS sensor_state;
+
+-- 1.2. Segundo la tabla de configuración (depende de certs)
 DROP TABLE IF EXISTS sensor_config;
+
+-- 1.3. Por último la tabla de certificados (la base de la pirámide)
+DROP TABLE IF EXISTS sensor_certs CASCADE;
 
 -- ==========================================================
 -- 2. ESTRUCTURA DE TABLAS (DDL)
 -- ==========================================================
--- Tabla de CONFIGURACIÓN (Canal: config_events)
+-- 2.1. TABLA DE CERTIFICADOS X509 (Identidad de los 100 CPUs)
+CREATE TABLE sensor_certs (
+    cert_id        SERIAL PRIMARY KEY,
+    fingerprint    VARCHAR(64) UNIQUE NOT NULL, -- SHA256 del certificado
+    common_name    VARCHAR(255),
+    not_after      TIMESTAMP WITH TIME ZONE,
+    is_revoked     BOOLEAN DEFAULT FALSE,
+    pem_data       TEXT NOT NULL                -- Certificado en formato PEM
+);
+
+-- En tu tabla actual, el tipo TEXT es correcto. 
+-- PostgreSQL maneja TEXT de forma eficiente (TOAST) fuera de la fila principal 
+-- si el tamaño excede los 2KB, así que no ralentiza las búsquedas por ID.
+ALTER TABLE sensor_certs ALTER COLUMN pem_data SET STORAGE EXTERNAL;
+
+-- 2.2. TABLA DE CONFIGURACIÓN (Vínculo con Seguridad)
 CREATE TABLE sensor_config (
     sensor_id      INT PRIMARY KEY,
     hostname       VARCHAR(100) NOT NULL,
     ip_address     INET NOT NULL,
-    port           INT DEFAULT 1883,
-    is_active      BOOLEAN DEFAULT TRUE
+    is_active      BOOLEAN DEFAULT TRUE,
+    cert_id        INT REFERENCES sensor_certs(cert_id) ON DELETE SET NULL
 );
 
--- Tabla de ESTADO ACTUAL (Canal: state_events)
+-- 2.3. TABLA DE ESTADO (Telemetría Efímera)
 CREATE TABLE sensor_state (
     sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
     current_temp   NUMERIC(5, 2),
@@ -68,49 +129,81 @@ BEGIN
     RETURN NEW;
 END; $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_sensor_config_notify AFTER INSERT OR UPDATE ON sensor_config
+-- 5. LÓGICA REACTIVA PARA SEGURIDAD (Canal: cert_events)
+CREATE OR REPLACE FUNCTION notify_cert_change() RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('cert_events', json_build_object(
+        'action', TG_OP,
+        'cert_id', COALESCE(NEW.cert_id, OLD.cert_id),
+        'revoked', COALESCE(NEW.is_revoked, FALSE),
+        'cn', COALESCE(NEW.common_name, OLD.common_name)
+    )::text);
+    RETURN NULL;
+END; $$ LANGUAGE plpgsql;
+
+-- 6. TRIGGERS
+
+-- Notifica cambios en los Certificados
+CREATE TRIGGER trg_sensor_cert_notify 
+AFTER INSERT OR UPDATE OR DELETE ON sensor_certs
+FOR EACH ROW EXECUTE FUNCTION notify_cert_change();
+
+-- Notifica cambios en la Configuración (¡Aquí faltaba la función!)
+CREATE TRIGGER trg_sensor_config_notify 
+AFTER INSERT OR UPDATE OR DELETE ON sensor_config
 FOR EACH ROW EXECUTE FUNCTION notify_config_change();
 
-CREATE TRIGGER trg_sensor_state_notify AFTER INSERT OR UPDATE ON sensor_state
+-- Notifica cambios en la Telemetría
+CREATE TRIGGER trg_sensor_state_notify 
+AFTER INSERT OR UPDATE ON sensor_state
 FOR EACH ROW EXECUTE FUNCTION notify_state_change();
 
 -- ==========================================================
--- 4. OPERACIONES DE PRUEBA (DML)
+-- 7. OPERACIONES DE PRUEBA (DML)
 -- ==========================================================
 
--- A. PRUEBA DE CONFIGURACIÓN (Dispara 'config_events')
--- Insertar los primeros 3 nodos de tus 100 CPUs
-INSERT INTO sensor_config (sensor_id, hostname, ip_address) VALUES 
-(1, 'cpu-node-01', '192.168.1.101'),
-(2, 'cpu-node-02', '192.168.1.102'),
-(3, 'cpu-node-03', '192.168.1.103');
+-- A. PRUEBA DE SEGURIDAD (Dispara 'cert_events')
+-- Creamos las identidades para nuestros primeros nodos
+INSERT INTO sensor_certs (fingerprint, common_name, not_after, pem_data) VALUES 
+('hash_node_01_abc', 'cpu-node-01.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 1 -----END CERTIFICATE-----'),
+('hash_node_02_xyz', 'cpu-node-02.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 2 -----END CERTIFICATE-----'),
+('hash_node_03_123', 'cpu-node-03.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 3 -----END CERTIFICATE-----');
 
--- Actualizar IP de un nodo (Simula reconfiguración de red)
+-- B. PRUEBA DE CONFIGURACIÓN (Dispara 'config_events')
+-- Insertamos los nodos vinculándolos a su certificado correspondiente
+INSERT INTO sensor_config (sensor_id, hostname, ip_address, cert_id) VALUES 
+(1, 'cpu-node-01', '192.168.1.101', 1),
+(2, 'cpu-node-02', '192.168.1.102', 2),
+(3, 'cpu-node-03', '192.168.1.103', 3);
+
+-- Simulamos un cambio de red para el nodo 1
 UPDATE sensor_config SET ip_address = '10.0.0.15' WHERE sensor_id = 1;
 
--- B. PRUEBA DE ESTADO (Dispara 'state_events')
--- Primeras lecturas (Usando UPSERT para evitar duplicados)
+-- C. PRUEBA DE ESTADO / TELEMETRÍA (Dispara 'state_events')
+-- Usamos UPSERT para registrar las primeras temperaturas
 INSERT INTO sensor_state (sensor_id, current_temp) VALUES (1, 35.4)
 ON CONFLICT (sensor_id) DO UPDATE SET current_temp = EXCLUDED.current_temp, last_update = NOW();
 
 INSERT INTO sensor_state (sensor_id, current_temp) VALUES (2, 42.1)
 ON CONFLICT (sensor_id) DO UPDATE SET current_temp = EXCLUDED.current_temp, last_update = NOW();
 
--- Simular cambio de temperatura en el nodo 2 (El broker recibirá el JSON con 45.8)
-UPDATE sensor_state SET current_temp = 45.8, last_update = NOW() WHERE sensor_id = 2;
+-- D. PRUEBA DE REVOCACIÓN (Seguridad Reactiva)
+-- Si marcamos el certificado como revocado, el trigger 'cert_events' avisará al Broker
+UPDATE sensor_certs SET is_revoked = TRUE WHERE cert_id = 1;
 
 -- ==========================================================
--- 5. CONSULTA DE VERIFICACIÓN FINAL
+-- 8. CONSULTA DE VERIFICACIÓN FINAL (Con Seguridad)
 -- ==========================================================
 
--- Esta consulta une ambas tablas para mostrar el estado global
 SELECT 
     c.sensor_id AS "ID",
     c.hostname AS "Host",
     c.ip_address AS "IP",
     COALESCE(s.current_temp::text, 'N/A') AS "Temp (ºC)",
-    COALESCE(s.last_update::text, 'Sin datos') AS "Última Actualización",
+    cert.is_revoked AS "Revocado",
+    cert.common_name AS "CN Certificado",
     CASE WHEN c.is_active THEN 'ACTIVO' ELSE 'INACTIVO' END AS "Estado"
 FROM sensor_config c
 LEFT JOIN sensor_state s ON c.sensor_id = s.sensor_id
+LEFT JOIN sensor_certs cert ON c.cert_id = cert.cert_id
 ORDER BY c.sensor_id ASC;
