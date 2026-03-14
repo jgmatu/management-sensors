@@ -30,9 +30,11 @@
 #include <botan/tls_session_manager_memory.h>
 #include <botan/version.h>
 
-#include <testserver/ocsp_cache.hpp>
-#include <testserver/DatabaseManager.hpp>
-#include <testserver/JsonUtils.hpp>
+#include <oscp/ocsp_cache.hpp>
+#include <db/DatabaseManager.hpp>
+#include <net/QuantumSafeHttpServer.hpp>
+
+#include <json/JsonUtils.hpp>
 
 #define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/server/certs/ca.pem"
 #define HTTPS
