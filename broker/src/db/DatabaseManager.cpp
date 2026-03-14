@@ -1,4 +1,5 @@
-#include <broker/DatabaseManager.hpp>
+#include <db/DatabaseManager.hpp>
+
 #include <libpq-fe.h> // Raw libpq header
 #include <sys/epoll.h>
 
@@ -26,6 +27,7 @@ void DatabaseManager::connect()
 void DatabaseManager::execute(const std::string& sql)
 {
     pqxx::work txn(*connection_); // Starts a transaction
+
     txn.exec(sql);
     txn.commit(); // Explicitly commit
 }
@@ -74,7 +76,6 @@ boost::json::object DatabaseManager::get_sanity_info()
     }
 }
 
-
 void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::object& msg)
 {
     msg["channel"] = n.channel.c_str();
@@ -91,7 +92,7 @@ void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::ob
 }
 
 void DatabaseManager::listen_async(const std::string& channel, 
-                                  std::function<void(boost::json::object)> callback)
+                                std::function<void(boost::json::object)> callback)
 {
     std::cout << "Starting async listener for channel: " << channel << std::endl;
 
@@ -135,4 +136,29 @@ void DatabaseManager::listen_async(const std::string& channel,
             // throw;
         }
     }).detach(); // Detach the thread to run independently
+}
+
+/**
+ * @brief Ejecuta cualquier operación DML (INSERT, UPDATE, DELETE).
+ * @tparam Args Tipos de los parámetros para la query.
+ * @param query La sentencia SQL con placeholders ($1, $2, etc).
+ * @param args Los valores a insertar/actualizar.
+ * @return true si la transacción se completó con éxito.
+ */
+template <typename... Args>
+bool DatabaseManager::execute_dml(std::string_view query, Args&&... args) {
+    try {
+        // Creamos una transacción (W)ork
+        pqxx::work tx(*connection_);
+
+        // Usamos la sintaxis moderna de C++20 que libpqxx prefiere
+        // Nota: exec() con parámetros es seguro contra SQL Injection
+        tx.exec(query, pqxx::params{std::forward<Args>(args)...});
+
+        tx.commit();
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[DB-DML-ERROR] " << e.what() << " | Query: " << query << std::endl;
+        return false;
+    }
 }

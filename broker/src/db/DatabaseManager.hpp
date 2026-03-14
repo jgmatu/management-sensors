@@ -22,6 +22,8 @@ public:
     // Example: Execute a simple query
     void execute(const std::string& sql);
 
+    template <typename... Args> bool execute_dml(std::string_view query, Args&&... args);
+
     // Example: Fetch data (returns a result set)
     pqxx::result query(const std::string& sql);
 
