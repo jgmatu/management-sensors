@@ -5,6 +5,13 @@ DESCRIPCIÓN: Base de Datos RELACIONAL, REACTIVA y SEGURA
 MOTOR:       PostgreSQL 16+ (Optimizado para RHEL 10)
 =============================================================================
 
+FUENTE DE VERDAD (SOURCE OF TRUTH):
+Esta base de datos se define como el UNICO PUNTO DE AUTORIDAD del sistema. 
+Cualquier cambio en la seguridad, red o telemetría solo se considera válido 
+una vez que ha sido persistido y validado en este esquema. Ningún componente 
+externo debe mantener configuraciones locales persistentes; el estado maestro 
+reside exclusivamente en estas tablas.
+
 LÓGICA RELACIONAL (Jerarquía de Datos):
 1. [CAPA DE SEGURIDAD] sensor_certs: 
    - Raíz de confianza y gestión de identidades X.509 (Formato PEM).
@@ -14,26 +21,25 @@ LÓGICA RELACIONAL (Jerarquía de Datos):
    - Vínculo lógico-físico de la red. 
    - Asocia cada nodo con su direccionamiento IP y su certificado activo.
    
-3. [CAPA DE ESTADO] sensor_state: 
+3. [CAPA DE ESTADO]    sensor_state: 
    - Almacén de telemetría efímera. 
    - Optimizado para mantener exclusivamente el último valor de temperatura 
      por nodo, garantizando consultas de estado actual en tiempo constante.
 
 ARQUITECTURA REACTIVA (Mecanismo NOTIFY/LISTEN):
-Esta base de datos opera bajo un modelo 'Event-Driven' (Dirigido por Eventos). 
-No requiere consultas periódicas para detectar cambios; en su lugar, utiliza 
-disparadores (Triggers) internos que emiten notificaciones asíncronas en 
-canales aislados ante cualquier alteración de los datos:
+Como fuente de verdad activa, la base de datos emite notificaciones asíncronas 
+en canales aislados ante cualquier alteración de su estado maestro, 
+permitiendo una sincronización inmediata sin necesidad de consultas:
 
-- cert_events:   Notificaciones de seguridad (Inserción, Revocación o Borrado).
+- cert_events:   Eventos de seguridad (Inserción, Revocación o Borrado).
 - config_events: Cambios en la topología de red o configuración de nodos.
 - state_events:  Actualizaciones de telemetría en tiempo real.
 
 NOTA FINAL SOBRE INTEGRIDAD:
-El sistema implementa integridad referencial estricta. El borrado en cascada 
-(ON DELETE CASCADE) asegura la limpieza automática de registros de estado 
-y telemetría ante la eliminación de nodos o certificados, manteniendo la 
-consistencia del esquema sin intervención externa.
+El sistema implementa integridad referencial estricta mediante claves foráneas. 
+El borrado en cascada (ON DELETE CASCADE) asegura la coherencia absoluta del 
+esquema, eliminando automáticamente registros de estado o configuración ante 
+la baja de identidades, evitando la existencia de datos huérfanos.
 =============================================================================
 */
 
