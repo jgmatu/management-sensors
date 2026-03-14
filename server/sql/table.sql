@@ -33,14 +33,32 @@ CREATE TABLE sensor_state (
 -- ==========================================================
 -- 3. LÓGICA DE NOTIFICACIONES (TRIGGERS)
 -- ==========================================================
-CREATE OR REPLACE FUNCTION notify_config_change() RETURNS TRIGGER AS $$
+-- Función de Notificación Robusta para Configuración
+CREATE OR REPLACE FUNCTION notify_config_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    payload JSONB;
 BEGIN
-    PERFORM pg_notify('config_events', json_build_object(
-        'action', TG_OP, 'sensor_id', NEW.sensor_id, 
-        'new_ip', NEW.ip_address::text, 'hostname', NEW.hostname
-    )::text);
-    RETURN NEW;
-END; $$ LANGUAGE plpgsql;
+    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+    IF (TG_OP = 'DELETE') THEN
+        payload = jsonb_build_object(
+            'action', 'DELETE',
+            'sensor_id', OLD.sensor_id,
+            'hostname', OLD.hostname
+        );
+    ELSE
+        payload = jsonb_build_object(
+            'action', TG_OP,
+            'sensor_id', NEW.sensor_id,
+            'new_ip', NEW.ip_address::text,
+            'hostname', NEW.hostname
+        );
+    END IF;
+
+    PERFORM pg_notify('config_events', payload::text);
+    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION notify_state_change() RETURNS TRIGGER AS $$
 BEGIN
