@@ -69,11 +69,12 @@ Handshake complete
 
 ## Example echo TLS v1.3 echo server
 ```bash
+cmake -S . -B build
+make -j$(nproc) -C build
 build/testserver --cert certs/server.pem --key certs/server.key --port 50443 --policy policies/pqc_basic.txt
 ```
 
 Using the browser of you choice, visit: [https://localhost:50443](https://localhost:50443) to see it in action.
-Using the browser of you choice, visit: [https://javi.es:50443](https://localhost:50443) to see it in action. (CERTS)
 
 ## PostgreSQL example pipeline output stream
 ```
