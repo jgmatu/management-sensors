@@ -34,7 +34,7 @@
 #include <testserver/DatabaseManager.hpp>
 #include <testserver/JsonUtils.hpp>
 
-#define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/certs/ca.pem"
+#define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/server/certs/ca.pem"
 #define HTTPS
 
 namespace
