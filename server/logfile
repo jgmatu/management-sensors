@@ -16,3 +16,5 @@
 2026-03-14 19:04:32.947 CET [15276] FATAL:  connection to client lost
 2026-03-14 19:09:05.506 CET [13430] LOG:  checkpoint starting: time
 2026-03-14 19:09:05.721 CET [13430] LOG:  checkpoint complete: wrote 2 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.201 s, sync=0.006 s, total=0.215 s; sync files=3, longest=0.006 s, average=0.002 s; distance=49 kB, estimate=51 kB; lsn=0/3D43DF0, redo lsn=0/3D43D98
+2026-03-14 22:26:34.138 CET [13430] LOG:  checkpoint starting: time
+2026-03-14 22:26:40.163 CET [13430] LOG:  checkpoint complete: wrote 60 buffers (0.4%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=6.012 s, sync=0.011 s, total=6.026 s; sync files=52, longest=0.008 s, average=0.001 s; distance=358 kB, estimate=358 kB; lsn=0/3D9D8C8, redo lsn=0/3D9D838
