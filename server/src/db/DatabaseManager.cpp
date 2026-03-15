@@ -72,35 +72,39 @@ void DatabaseManager::disconnect()
 boost::json::object DatabaseManager::get_sanity_info()
 {
     boost::json::object info;
+    
+    // Acquire lock to ensure connection_ isn't being reset by another thread
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+    
+    if (!connection_ || !connection_->is_open()) {
+        info["error"] = "Database connection not available";
+        return info;
+    }
+
     try
     {
+        // Use a nontransaction for read-only sanity checks
         pqxx::nontransaction ntxn(*connection_);
 
         // 1. Get PostgreSQL Server Version
         pqxx::row pg_ver = ntxn.exec("SELECT version();").one_row();
         info["postgres_version"] = pg_ver[0].c_str();
 
-        // 2. Get SSL Status & Cipher (Fixed function name to ssl_version)
-        pqxx::result ssl_info = ntxn.exec(
-            "SELECT ssl_is_used(), ssl_cipher(), ssl_version();"
-        );
+        // 2. Get Database Uptime (useful for health checks)
+        pqxx::row uptime = ntxn.exec("SELECT now() - pg_postmaster_start_time();").one_row();
+        info["db_uptime"] = uptime[0].c_str();
 
-        if (!ssl_info.empty()) {
-            bool is_used = ssl_info[0][0].as<bool>();
-            info["ssl_active"] = is_used;
-            
-            // Safe check for NULL values before calling .c_str()
-            info["ssl_cipher"] = !ssl_info[0][1].is_null() ? ssl_info[0][1].c_str() : "none";
-            info["ssl_protocol"] = !ssl_info[0][2].is_null() ? ssl_info[0][2].c_str() : "none";
-        }
+        // 3. Current connection backend PID
+        info["backend_pid"] = connection_->backendpid();
 
-        // 3. Client Library Info
-        info["libpq_compile_version"] = PQXX_VERSION;
+        // 4. pqxx Library Info
+        info["pqxx_version"] = PQXX_VERSION;
 
         return info;
-    } catch (const std::exception& e) {
-        // Log locally and return the error in the JSON object
-        std::cerr << "Sanity Check Failed: " << e.what() << std::endl;
+    } 
+    catch (const std::exception& e) 
+    {
+        std::cerr << "[DB-Sanity] Check Failed: " << e.what() << std::endl;
         info["error"] = e.what();
         return info;
     }
