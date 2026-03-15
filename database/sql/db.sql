@@ -285,7 +285,6 @@ ON CONFLICT (sensor_id) DO UPDATE SET current_temp = EXCLUDED.current_temp, last
 -- Si marcamos el certificado como revocado, el trigger 'cert_events' avisará al Broker
 UPDATE sensor_certs SET is_revoked = TRUE WHERE cert_id = 1;
 
-
 -- ==========================================================
 -- 2. TEST: Server requests a configuration change
 -- ==========================================================
