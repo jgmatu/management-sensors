@@ -68,7 +68,7 @@ inline std::shared_ptr<Botan::TLS::Policy> load_tls_policy(
     return std::make_shared<Botan::TLS::Text_Policy>(policy_stream);
 }
 
-auto make_final_completion_handler(const std::string& context)
+std::function<void(std::exception_ptr)> make_final_completion_handler(const std::string& context)
 {
     return [=](std::exception_ptr e)
     {
@@ -81,8 +81,9 @@ auto make_final_completion_handler(const std::string& context)
             catch (const std::exception& ex)
             {
                 const auto now = std::chrono::system_clock::now();
-                const std::time_t t_c =
-                std::chrono::system_clock::to_time_t(now);
+                const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
+                
+                // Nota: std::ctime añade un salto de línea al final
                 std::cerr << std::ctime(&t_c) << " " << context << ": "
                           << ex.what() << std::endl;
             }
@@ -115,7 +116,7 @@ net::awaitable<void> do_session(
             // Read raw decrypted bytes
             size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
 
-            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
             std::cout << std::endl;
 
             // Log connection details once (optional)
@@ -124,7 +125,7 @@ net::awaitable<void> do_session(
             // Echo back to client using the TLS stream's native async send
             size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
 
-            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
             std::cout << std::endl;
         }
     }
@@ -274,6 +275,19 @@ int main(int argc, char* argv[])
         std::cout << "SERVER READY!" << std::endl;
         io.run();
         std::cout << "SERVER SHUTDOWN!" << std::endl;
+
+        // Clean up database connection before shutting down the server
+        db.disconnect();
+        db.join();
+
+        // Notify threads to stop and join them
+        io.stop();
+        for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+        std::cout << "All threads joined, exiting." << std::endl;
     }
     catch (const std::exception& ex)
     {

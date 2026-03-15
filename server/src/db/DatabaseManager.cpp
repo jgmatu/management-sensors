@@ -5,9 +5,12 @@
 DatabaseManager::DatabaseManager(const std::string& connection_str) 
         : conn_str_(connection_str) {}
 
-    // Establish connection
+// Establish connection
 void DatabaseManager::connect() 
 {
+    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_.
+    std::lock_guard<std::mutex> lock(conn_mutex_); 
+
     try
     {
         connection_ = std::make_unique<pqxx::connection>(conn_str_);
@@ -20,6 +23,30 @@ void DatabaseManager::connect()
         std::cerr << "Connection failed: " << e.what() << std::endl;
         throw;
     }
+}
+
+void DatabaseManager::disconnect() 
+{
+    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_.
+    std::lock_guard<std::mutex> lock(conn_mutex_); 
+
+    try 
+    {
+        if (connection_ && connection_->is_open()) 
+        {
+            // Opcional: Notificar el cierre
+            std::cout << "Disconnecting from: " << connection_->dbname() << std::endl;
+            
+            connection_->close(); // Cierra la conexión física
+        }
+    }
+    catch (const std::exception& e) 
+    {
+        std::cerr << "Error during disconnect: " << e.what() << std::endl;
+    }
+
+    // Importante: Resetear el smart pointer para dejarlo en estado nulo
+    connection_.reset();
 }
 
 boost::json::object DatabaseManager::get_sanity_info()
@@ -75,58 +102,52 @@ void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::ob
     }
 }
 
-void DatabaseManager::listen_async(const std::string& channel, 
-                                  std::function<void(boost::json::object)> callback)
+void DatabaseManager::listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) 
 {
-    std::cout << "Starting async listener for channel: " << channel << std::endl;
+    // Reset stop signal before starting
+    stop_listener_.store(false);
 
-    std::jthread([this, channel, callback](std::stop_token st)
+    // Assign the thread to the member variable
+    listener_thread_ = std::jthread([this, channel, callback](std::stop_token st) 
     {
-        try
+        try 
         {
-            if (!connection_ || !connection_->is_open()) {
-                throw std::runtime_error("Database connection is not established.");
-            }
-            int sock = connection_->sock(); // Get the underlying Postgres socket
-
-            // 1. Force the LISTEN command immediately
-            pqxx::nontransaction nt(*connection_);
-            nt.exec("LISTEN " + channel + ";");
-            nt.commit(); // Nontransactions don't strictly need this, but it ensures execution
-
-            // 2. Register the handler
-            // The lambda receives a pqxx::notification object containing:
-            // .channel, .payload, and .backend_pid
-            connection_->listen(channel, [this, callback] (pqxx::notification n) {
-                boost::json::object msg;
-                parser_notify(n, msg); // Parse payload into JSON if possible
-                callback(msg);
-            });
-
-            // 4. Enter a loop to wait for notifications
-            // await_notification() blocks until a notification arrives or a timeout occurs
-
-            for (;;)
             {
-                // Data available: let libpqxx process it
-                // If the connection is broken, this will throw pqxx::broken_connection
-                std::cout << "Waiting for notification..." << std::endl;
-                /*
-                    Hacking note: libpqxx's wait_notification() is designed to be
-                    efficient and will internally use select() or poll() on the PostgreSQL socket.
+                std::lock_guard<std::mutex> lock(conn_mutex_);
+                if (!connection_ || !connection_->is_open()) {
+                    throw std::runtime_error("Database connection is not established.");
+                }
 
-                    * Note: wait_notification() is a blocking call that internally uses select() or poll()
-                    * on the PostgreSQL socket. It will return when a notification is received or if the
-                    * connection is lost. If the connection is lost, it will throw an exception which we catch
-                    * to handle reconnection logic if needed.
-                */
+                pqxx::nontransaction nt(*connection_);
+                nt.exec("LISTEN " + channel + ";");
+
+                connection_->listen(channel, [this, callback](pqxx::notification n) {
+                    boost::json::object msg;
+                    parser_notify(n, msg);
+                    callback(msg);
+                });
+            }
+            // Use the stop_token (st) to check if we should exit
+            while (!stop_listener_.load() && !st.stop_requested()) 
+            {
+                std::cout << "Waiting for notification..." << std::endl;
+                
+                // wait_notification() blocks, but jthread destructor or 
+                // .request_stop() will signal the stop_token.
                 connection_->wait_notification();
             }
+            std::cout << "Listener thread stopping gracefully." << std::endl;
         }
-        catch (const std::exception& e)
-        {
-            std::cerr << "Connection failed: " << e.what() << std::endl;
-            // throw;
+        catch (const std::exception& e) {
+            std::cerr << "Listener error: " << e.what() << std::endl;
         }
-    }).detach(); // Detach the thread to run independently
+        std::cout << "Listener database thread exiting." << std::endl;
+    });
+}
+
+void DatabaseManager::join()
+{
+    if (listener_thread_.joinable()) {
+        listener_thread_.join();
+    }
 }

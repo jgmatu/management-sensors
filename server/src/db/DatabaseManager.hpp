@@ -5,6 +5,7 @@
 #include <string>
 #include <functional>
 #include <thread>
+#include <atomic>
 
 #include <pqxx/pqxx>
 #include <boost/json.hpp> // For JSON handling in get_sanity_info()
@@ -18,6 +19,7 @@ public:
 
     // Establish connection
     void connect();
+    void disconnect();
 
     // Example: Execute a simple query
     void execute(const std::string& sql);
@@ -31,10 +33,19 @@ public:
 
     void listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
 
+    void join();
+
 private:
     std::string conn_str_;
-    std::unique_ptr<pqxx::connection> connection_;
-    std::thread listener_thread_;
-    bool stop_listener_ = false;
+    std::jthread listener_thread_;
     std::function<void(boost::json::object)> notification_callback_;
+
+    // Protege el ciclo de vida de connection_.
+    // Dado que cualquier clase externa puede invocar disconnect(), 
+    // todas las operaciones internas (especialmente las asíncronas) 
+    // DEBEN adquirir este mutex antes de desreferenciar el puntero.
+    std::unique_ptr<pqxx::connection> connection_;
+    mutable std::mutex conn_mutex_; 
+
+    std::atomic<bool> stop_listener_{false};
 };
