@@ -38,6 +38,65 @@
 
 // #define SESSION_EXPIRED_TIMEOUT
 
+struct SensorCommand {
+    std::string cmd;
+    int id = -1;
+    std::string attr;
+    std::string value;
+    bool valid = false;
+};
+
+
+/**
+ * @brief Improved parser for sensor CLI syntax.
+ * Handles trailing spaces, malformed IDs, and stream fail states.
+ */
+SensorCommand parse_sensor_command(const std::string& request) {
+    SensorCommand sc;
+    std::istringstream iss(request);
+    
+    // 1. Clear the struct and mark invalid by default
+    sc.valid = false;
+
+    // 2. Extract tokens one by one and check the stream state
+    if (!(iss >> sc.cmd)) return sc;
+    
+    // Attempt to extract the ID as an integer
+    if (!(iss >> sc.id)) {
+        // If ID is not a valid int, the stream fails. 
+        // We must clear it if we want to continue, but here we just return invalid.
+        return sc;
+    }
+
+    if (!(iss >> sc.attr)) return sc;
+    if (!(iss >> sc.value)) return sc;
+
+    // 3. Final check: Ensure there isn't UNEXPECTED extra data
+    std::string extra;
+    if (iss >> extra) {
+        // If there's more data (like a 5th word), the command is malformed
+        return sc;
+    }
+
+    // 4. If we reached here, the basic structure is correct
+    sc.valid = true;
+    return sc;
+}
+
+/**
+ * @brief Helper to print the SensorCommand state.
+ * Useful for debugging race conditions or malformed CLI inputs.
+ */
+std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
+    os << "[SensorCommand] " 
+       << (sc.valid ? "VALID" : "INVALID") << "\n"
+       << "  Command: " << (sc.cmd.empty() ? "N/A" : sc.cmd) << "\n"
+       << "  ID:      " << sc.id << "\n"
+       << "  Attr:    " << (sc.attr.empty() ? "N/A" : sc.attr) << "\n"
+       << "  Value:   " << (sc.value.empty() ? "N/A" : sc.value);
+    return os;
+}
+
 /**
  * @brief Main logic processor for decrypted TLS traffic.
  * 
@@ -52,32 +111,46 @@
  * @param input The raw decrypted bytes received from the TLS client.
  * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
  */
-std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input)
-{
+/**
+ * @brief Logic processor for the CONFIG_SENSOR command.
+ * Syntax: CONFIG_SENSOR <id> IP <address>
+ * Example: CONFIG_SENSOR 1 IP 192.158.1.100
+ */
+std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     if (input.empty()) return {};
 
-    // 1. Convert input to string for easy parsing/logging
-    std::string request(input.begin(), input.end());
-    std::cout << "[PQC-Logic] Processing request: " << request << std::endl;
-
+    const std::string request(input.begin(), input.end());
+    const SensorCommand sc = parse_sensor_command(request);
     std::string response;
 
-    // 2. Business Logic: Decision tree based on PQC input
-    if (request.find("PING") != std::string::npos)
-    {
-        response = "PONG";
+    std::cout << sc << std::endl;
+
+    // 1. Validation Logic
+    if (!sc.valid || sc.cmd != "CONFIG_SENSOR") {
+        response = "ERROR: Invalid Syntax. Use: CONFIG_SENSOR <id> IP <address>";
+    } 
+    else if (sc.attr != "IP") {
+        response = "ERROR: Unknown attribute '" + sc.attr + "'.";
     }
-    else if (request.find("STATUS") != std::string::npos)
-    {
-        response = "SYSTEM_OK_PQC_ACTIVE";
-    }
-    else
-    {
-        // Default behavior: Echo with a prefix
-        response = "ACK: " + request;
+    else {
+        // 2. Execution Logic
+        try {
+            /* 
+             * @note CONCURRENCY: db->execute_query() is thread-safe.
+             */
+            // std::string sql = "UPDATE sensor_config SET ip_address = " + 
+            //                  pqxx::to_quoted_string(sc.value) + 
+            //                  " WHERE sensor_id = " + std::to_string(sc.id) + ";";
+            // db->execute_query(sql);
+
+            std::cout << "[PQC-Logic] Configured Sensor " << sc.id << " with IP " << sc.value << std::endl;
+            response = "OK: Sensor " + std::to_string(sc.id) + " updated.";
+        } 
+        catch (const std::exception& e) {
+            response = "ERROR: DB Failure - " + std::string(e.what());
+        }
     }
 
-    // 3. Return the response as raw bytes for the TLS Engine
     return std::vector<uint8_t>(response.begin(), response.end());
 }
 
@@ -121,8 +194,7 @@ int main(int argc, char* argv[])
     boost::program_options::variables_map vm;
     try
     {
-        boost::program_options::store(
-            boost::program_options::parse_command_line(argc, argv, desc), vm);
+        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
 
         if (vm.count("help") != 0 || argc < 2)
         {

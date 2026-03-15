@@ -110,7 +110,6 @@ boost::json::object DatabaseManager::get_sanity_info()
     }
 }
 
-
 void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::object& msg)
 {
     msg["channel"] = n.channel.c_str();
@@ -181,7 +180,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             std::cout << "Listener thread stopping gracefully." << std::endl;
         }
         catch (const pqxx::broken_connection& e) {
-            /* 
+            /*  
              * EXPECTED DISCONNECTION SIGNAL:
              * This occurs when disconnect() is called or the DB server drops the socket.
              * We treat this as a signal to finalize the thread gracefully.

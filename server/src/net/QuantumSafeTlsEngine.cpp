@@ -93,6 +93,8 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
     std::shared_ptr<Botan::TLS::Context> ctx,
     std::shared_ptr<OCSP_Cache> ocsp_cache)
 {
+    const size_t BUFFER_SIZE = 8192;
+
     // TlsHttpCallbacks is still needed for OCSP and logging handshake details
     auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
 
@@ -108,7 +110,7 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
         std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
         // TCP LAYER: Read/Write Loop
-        std::vector<uint8_t> buffer(16);
+        std::vector<uint8_t> buffer(BUFFER_SIZE);
         for (;;)
         {
             // Set the timeout.
@@ -129,7 +131,9 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
             }
 
             // 3. WRITE: Send the processed response back
-            if (!response.empty()) {
+            if (!response.empty())
+            {
+                response.push_back('\n'); 
                 co_await tls_stream.async_write_some(boost::asio::buffer(response));
             }
             std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
