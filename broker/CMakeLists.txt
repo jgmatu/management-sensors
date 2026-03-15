@@ -114,13 +114,6 @@ target_link_libraries(broker
         PostgreSQL::libpgcommon
         PostgreSQL::libpgport
         Threads::Threads
-        
-        # 4. Low-level providers (OpenSSL must be near the end)
-        OpenSSL::SSL
-        OpenSSL::Crypto
 
         Boost::json
-
-        # 5. System loader (often needed for static linking on RHEL)
-        dl
 )
