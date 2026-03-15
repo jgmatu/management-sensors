@@ -288,14 +288,24 @@ int main(int argc, char* argv[])
         // ni fugas de recursos al cerrar el proceso.
         db.join();
 
-        // Notify threads to stop and join them
+        // --- ORCHESTRATED THREAD POOL SHUTDOWN ---
+
+        // 1. Terminate the Boost.Asio event loop.
+        // This prevents any new tasks from being accepted and cancels
+        // any pending timers or async operations immediately.
         io.stop();
+
+        // 2. Synchronize and clean up the worker threads.
+        // We iterate through the pool to ensure every worker thread
+        // finishes its current execution frame. This prevents "zombie"
+        // threads and ensures that all stack-allocated resources within
+        // the lambda functions are safely destroyed before the main process exits.
         for (auto& thread : threads) {
             if (thread.joinable()) {
                 thread.join();
             }
         }
-        std::cout << "All threads joined, exiting." << std::endl;
+        std::cout << "[System] Thread pool joined and I/O context finalized." << std::endl;
     }
     catch (const std::exception& ex)
     {
