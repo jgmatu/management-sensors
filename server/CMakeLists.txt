@@ -69,6 +69,7 @@ add_executable(${PROJECT_NAME}
     src/oscp/ocsp_cache.cpp
     src/db/DatabaseManager.cpp
     src/json/JsonUtils.cpp
+    src/net/QuantumSafeTlsEngine.cpp
     src/main.cpp
 )
 
