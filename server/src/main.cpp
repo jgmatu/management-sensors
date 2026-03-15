@@ -52,11 +52,16 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     std::string response;
 
     // 2. Business Logic: Decision tree based on PQC input
-    if (request.find("PING") != std::string::npos) {
+    if (request.find("PING") != std::string::npos)
+    {
         response = "PONG";
-    } else if (request.find("STATUS") != std::string::npos) {
+    }
+    else if (request.find("STATUS") != std::string::npos)
+    {
         response = "SYSTEM_OK_PQC_ACTIVE";
-    } else {
+    }
+    else
+    {
         // Default behavior: Echo with a prefix
         response = "ACK: " + request;
     }
