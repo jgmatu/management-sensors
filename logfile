@@ -10,3 +10,217 @@
 2026-03-15 03:21:00.818 CET [66888] FATAL:  connection to client lost
 2026-03-15 03:25:21.568 CET [44770] LOG:  checkpoint starting: time
 2026-03-15 03:25:21.875 CET [44770] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 2 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.301 s, sync=0.004 s, total=0.308 s; sync files=4, longest=0.003 s, average=0.001 s; distance=136 kB, estimate=136 kB; lsn=0/3F0AF48, redo lsn=0/3F0AEF0
+2026-03-15 04:01:46.859 CET [44766] LOG:  received smart shutdown request
+2026-03-15 04:01:46.861 CET [44766] LOG:  background worker "logical replication launcher" (PID 44775) exited with exit code 1
+2026-03-15 04:01:46.861 CET [44770] LOG:  shutting down
+2026-03-15 04:01:46.862 CET [44770] LOG:  checkpoint starting: shutdown immediate
+2026-03-15 04:01:46.867 CET [44770] LOG:  checkpoint complete: wrote 0 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.006 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=122 kB; lsn=0/3F0AFF8, redo lsn=0/3F0AFF8
+2026-03-15 04:01:46.874 CET [44766] LOG:  database system is shut down
+2026-03-15 16:26:41.076 CET [6792] LOG:  starting PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit
+2026-03-15 16:26:41.076 CET [6792] LOG:  listening on IPv6 address "::1", port 5432
+2026-03-15 16:26:41.076 CET [6792] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-03-15 16:26:41.079 CET [6792] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2026-03-15 16:26:41.085 CET [6798] LOG:  database system was shut down at 2026-03-15 04:01:46 CET
+2026-03-15 16:26:41.091 CET [6792] LOG:  database system is ready to accept connections
+2026-03-15 16:26:44.875 CET [6807] ERROR:  mismatched parentheses at or near ";" at character 549
+2026-03-15 16:26:44.875 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_config_change()
+	RETURNS TRIGGER AS $$
+	DECLARE
+	    payload JSONB;
+	BEGIN
+	    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+	    IF (TG_OP = 'DELETE') THEN
+	        payload = jsonb_build_object(
+	            'action', 'DELETE',
+	            'sensor_id', OLD.sensor_id,
+	            'hostname', OLD.hostname
+	        );
+	    ELSE
+	        payload = jsonb_build_object(
+	            'action', TG_OP,
+	            'sensor_id', NEW.sensor_id,DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+	            'new_ip', NEW.ip_address::text,
+	            'hostname', NEW.hostname
+	        );
+	    END IF;
+	
+	    PERFORM pg_notify('config_events', payload::text);
+	    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+	END;
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:26:44.878 CET [6807] ERROR:  syntax error at or near "MQTT_TIMEOUT" at character 367
+2026-03-15 16:26:44.878 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_sensor_config_error() RETURNS TRIGGER AS $$
+	BEGIN
+	    PERFORM pg_notify(
+	        'config_errors', 
+	        json_build_object(
+	            'sensor_id', NEW.sensor_id,
+	            'error_code', NEW.error_code,
+	            'detail', NEW.error_detail,
+	            'timestamp', NEW.occurred_at
+	        )::text
+	    );
+	    RETURN NEW;
+	END;MQTT_TIMEOUT
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:26:44.879 CET [6807] ERROR:  function notify_sensor_config_error() does not exist
+2026-03-15 16:26:44.879 CET [6807] STATEMENT:  CREATE TRIGGER trg_notify_config_error
+	AFTER INSERT ON sensor_config_errors
+	FOR EACH ROW EXECUTE FUNCTION notify_sensor_config_error();
+2026-03-15 16:26:48.276 CET [6807] ERROR:  mismatched parentheses at or near ";" at character 549
+2026-03-15 16:26:48.276 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_config_change()
+	RETURNS TRIGGER AS $$
+	DECLARE
+	    payload JSONB;
+	BEGIN
+	    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+	    IF (TG_OP = 'DELETE') THEN
+	        payload = jsonb_build_object(
+	            'action', 'DELETE',
+	            'sensor_id', OLD.sensor_id,
+	            'hostname', OLD.hostname
+	        );
+	    ELSE
+	        payload = jsonb_build_object(
+	            'action', TG_OP,
+	            'sensor_id', NEW.sensor_id,DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+	            'new_ip', NEW.ip_address::text,
+	            'hostname', NEW.hostname
+	        );
+	    END IF;
+	
+	    PERFORM pg_notify('config_events', payload::text);
+	    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+	END;
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:26:48.278 CET [6807] ERROR:  syntax error at or near "MQTT_TIMEOUT" at character 367
+2026-03-15 16:26:48.278 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_sensor_config_error() RETURNS TRIGGER AS $$
+	BEGIN
+	    PERFORM pg_notify(
+	        'config_errors', 
+	        json_build_object(
+	            'sensor_id', NEW.sensor_id,
+	            'error_code', NEW.error_code,
+	            'detail', NEW.error_detail,
+	            'timestamp', NEW.occurred_at
+	        )::text
+	    );
+	    RETURN NEW;
+	END;MQTT_TIMEOUT
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:26:48.279 CET [6807] ERROR:  function notify_sensor_config_error() does not exist
+2026-03-15 16:26:48.279 CET [6807] STATEMENT:  CREATE TRIGGER trg_notify_config_error
+	AFTER INSERT ON sensor_config_errors
+	FOR EACH ROW EXECUTE FUNCTION notify_sensor_config_error();
+2026-03-15 16:28:47.932 CET [6807] ERROR:  syntax error at or near "" at character 1
+2026-03-15 16:28:47.932 CET [6807] STATEMENT:  [200~-- ==========================================================
+	-- 1. LIMPIEZA TOTAL (DROP)
+	-- ==========================================================
+	-- Borrar Triggers y Funciones
+	DROP TRIGGER IF EXISTS trg_sensor_cert_notify ON sensor_certs;
+2026-03-15 16:28:47.970 CET [6807] ERROR:  mismatched parentheses at or near ";" at character 549
+2026-03-15 16:28:47.970 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_config_change()
+	RETURNS TRIGGER AS $$
+	DECLARE
+	    payload JSONB;
+	BEGIN
+	    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+	    IF (TG_OP = 'DELETE') THEN
+	        payload = jsonb_build_object(
+	            'action', 'DELETE',
+	            'sensor_id', OLD.sensor_id,
+	            'hostname', OLD.hostname
+	        );
+	    ELSE
+	        payload = jsonb_build_object(
+	            'action', TG_OP,
+	            'sensor_id', NEW.sensor_id,DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+	            'new_ip', NEW.ip_address::text,
+	            'hostname', NEW.hostname
+	        );
+	    END IF;
+	
+	    PERFORM pg_notify('config_events', payload::text);
+	    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+	END;
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:28:50.747 CET [6807] ERROR:  syntax error at or near "~" at character 1
+2026-03-15 16:28:50.747 CET [6807] STATEMENT:  ~
+	CREATE TRIGGER trg_sensor_state_notify 
+	AFTER INSERT OR UPDATE ON sensor_state
+	FOR EACH ROW EXECUTE FUNCTION notify_state_change();
+2026-03-15 16:28:53.732 CET [6807] ERROR:  mismatched parentheses at or near ";" at character 549
+2026-03-15 16:28:53.732 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_config_change()
+	RETURNS TRIGGER AS $$
+	DECLARE
+	    payload JSONB;
+	BEGIN
+	    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+	    IF (TG_OP = 'DELETE') THEN
+	        payload = jsonb_build_object(
+	            'action', 'DELETE',
+	            'sensor_id', OLD.sensor_id,
+	            'hostname', OLD.hostname
+	        );
+	    ELSE
+	        payload = jsonb_build_object(
+	            'action', TG_OP,
+	            'sensor_id', NEW.sensor_id,DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+	            'new_ip', NEW.ip_address::text,
+	            'hostname', NEW.hostname
+	        );
+	    END IF;
+	
+	    PERFORM pg_notify('config_events', payload::text);
+	    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+	END;
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:30:09.814 CET [6807] ERROR:  mismatched parentheses at or near ";" at character 549
+2026-03-15 16:30:09.814 CET [6807] STATEMENT:  CREATE OR REPLACE FUNCTION notify_config_change()
+	RETURNS TRIGGER AS $$
+	DECLARE
+	    payload JSONB;
+	BEGIN
+	    -- Si es DELETE, usamos OLD. Si es INSERT/UPDATE, usamos NEW.
+	    IF (TG_OP = 'DELETE') THEN
+	        payload = jsonb_build_object(
+	            'action', 'DELETE',
+	            'sensor_id', OLD.sensor_id,
+	            'hostname', OLD.hostname
+	        );
+	    ELSE
+	        payload = jsonb_build_object(
+	            'action', TG_OP,
+	            'sensor_id', NEW.sensor_id,DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+	            'new_ip', NEW.ip_address::text,
+	            'hostname', NEW.hostname
+	        );
+	    END IF;
+	
+	    PERFORM pg_notify('config_events', payload::text);
+	    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+	END;
+	$$ LANGUAGE plpgsql;
+2026-03-15 16:31:35.913 CET [6807] ERROR:  insert or update on table "sensor_config_pending" violates foreign key constraint "sensor_config_pending_sensor_id_fkey"
+2026-03-15 16:31:35.913 CET [6807] DETAIL:  Key (sensor_id)=(101) is not present in table "sensor_config".
+2026-03-15 16:31:35.913 CET [6807] STATEMENT:  INSERT INTO sensor_config_pending (sensor_id, new_hostname, new_ip_address, new_is_active)
+	VALUES (101, 'sensor-living-01-REVISED', '192.168.1.55', TRUE);
+2026-03-15 16:31:35.913 CET [6807] ERROR:  insert or update on table "sensor_config_errors" violates foreign key constraint "sensor_config_errors_sensor_id_fkey"
+2026-03-15 16:31:35.913 CET [6807] DETAIL:  Key (sensor_id)=(101) is not present in table "sensor_config".
+2026-03-15 16:31:35.913 CET [6807] STATEMENT:  INSERT INTO sensor_config_errors (sensor_id, error_code, error_detail, failed_config)
+	VALUES (101, 'MQTT_TIMEOUT', 'Sensor did not respond to PUB message within 5s', 
+	       (SELECT row_to_json(p) FROM sensor_config_pending p WHERE sensor_id = 101));
+2026-03-15 16:31:41.139 CET [6796] LOG:  checkpoint starting: time
+2026-03-15 16:32:00.394 CET [6796] LOG:  checkpoint complete: wrote 190 buffers (1.2%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 1 recycled; write=19.226 s, sync=0.016 s, total=19.256 s; sync files=271, longest=0.001 s, average=0.001 s; distance=2385 kB, estimate=2385 kB; lsn=0/41E7008, redo lsn=0/415F6A0
+2026-03-15 16:32:22.249 CET [6807] ERROR:  duplicate key value violates unique constraint "sensor_certs_fingerprint_key"
+2026-03-15 16:32:22.249 CET [6807] DETAIL:  Key (fingerprint)=(hash_node_01_abc) already exists.
+2026-03-15 16:32:22.249 CET [6807] STATEMENT:  INSERT INTO sensor_certs (fingerprint, common_name, not_after, pem_data) VALUES 
+	('hash_node_01_abc', 'cpu-node-01.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 1 -----END CERTIFICATE-----'),
+	('hash_node_02_xyz', 'cpu-node-02.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 2 -----END CERTIFICATE-----'),
+	('hash_node_03_123', 'cpu-node-03.pqc.internal', '2030-01-01', '-----BEGIN CERTIFICATE----- NODE 3 -----END CERTIFICATE-----');
+2026-03-15 16:32:22.250 CET [6807] ERROR:  duplicate key value violates unique constraint "sensor_config_pkey"
+2026-03-15 16:32:22.250 CET [6807] DETAIL:  Key (sensor_id)=(1) already exists.
+2026-03-15 16:32:22.250 CET [6807] STATEMENT:  INSERT INTO sensor_config (sensor_id, hostname, ip_address, cert_id) VALUES 
+	(1, 'cpu-node-01', '192.168.1.101', 1),
+	(2, 'cpu-node-02', '192.168.1.102', 2),
+	(3, 'cpu-node-03', '192.168.1.103', 3);
