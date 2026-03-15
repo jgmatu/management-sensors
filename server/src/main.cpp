@@ -90,387 +90,60 @@ auto make_final_completion_handler(const std::string& context)
     };
 }
 
-beast::string_view mime_type(beast::string_view path)
+net::awaitable<void> do_session(
+    tcp_stream stream,
+    std::shared_ptr<Botan::TLS::Context> ctx,
+    std::shared_ptr<OCSP_Cache> ocsp_cache)
 {
-    using beast::iequals;
-    const auto ext = [&path]
-    {
-        auto const pos = path.rfind(".");
-        if (pos == beast::string_view::npos)
-            return beast::string_view{};
-        return path.substr(pos);
-    }();
-
-    if (iequals(ext, ".htm"))
-        return "text/html";
-    if (iequals(ext, ".html"))
-        return "text/html";
-    if (iequals(ext, ".css"))
-        return "text/css";
-    if (iequals(ext, ".txt"))
-        return "text/plain";
-    if (iequals(ext, ".js"))
-        return "application/javascript";
-    if (iequals(ext, ".json"))
-        return "application/json";
-    if (iequals(ext, ".png"))
-        return "image/png";
-    if (iequals(ext, ".ico"))
-        return "image/png";
-    if (iequals(ext, ".jpe"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpeg"))
-        return "image/jpeg";
-    if (iequals(ext, ".jpg"))
-        return "image/jpeg";
-    if (iequals(ext, ".gif"))
-        return "image/gif";
-    if (iequals(ext, ".ico"))
-        return "image/vnd.microsoft.icon";
-    if (iequals(ext, ".svg"))
-        return "image/svg+xml";
-    if (iequals(ext, ".svgz"))
-        return "image/svg+xml";
-
-    return "application/text";
-}
-
-std::string path_cat(beast::string_view base, beast::string_view path)
-{
-    if (base.empty())
-    {
-        return std::string(path);
-    }
-
-    std::string result(base);
-
-    char constexpr path_separator = '/';
-    if (result.back() == path_separator)
-    {
-        result.resize(result.size() - 1);
-    }
-    result.append(path.data(), path.size());
-
-    return result;
-}
-
-template <class... Ts>
-struct overloaded : Ts...
-{
-    using Ts::operator()...;
-};
-
-template <class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
-template <class ResponseBody, class Body, class Allocator>
-http::message_generator prepare_response(
-    const http::request<Body, http::basic_fields<Allocator>>& req,
-    http::status status_code, ResponseBody body,
-    std::string_view content_type = "text/html")
-{
-    using resp_body_t = std::decay_t<ResponseBody>;
-
-    auto res = [&]
-    {
-        if constexpr (std::convertible_to<resp_body_t, std::string>)
-        {
-            http::response<http::string_body> r{status_code, req.version()};
-            r.body() = std::string(body);
-            return r;
-        }
-        else if constexpr (std::integral<resp_body_t>)
-        {
-            http::response<http::empty_body> r{status_code, req.version()};
-            r.content_length(body);
-            return r;
-        }
-        else if constexpr (std::same_as<http::file_body::value_type,
-                                        resp_body_t>)
-        {
-            return http::response<http::file_body>{
-                std::piecewise_construct, std::make_tuple(std::move(body)),
-                std::make_tuple(status_code, req.version())};
-        }
-        else
-        {
-            static_assert(std::integral<resp_body_t>,
-                          "Cannot handle the given response body");
-        }
-    }();
-
-    res.set(http::field::server,
-            std::string("Botan ") + Botan::short_version_string());
-    res.set(http::field::content_type, content_type);
-    res.keep_alive(req.keep_alive());
-
-    if constexpr (!std::integral<resp_body_t>)
-    {
-        res.prepare_payload();
-    }
-
-    return res;
-}
-
-// Returns a bad request response
-template <class Body, class Allocator>
-auto bad_request(const http::request<Body, http::basic_fields<Allocator>>& req,
-                 std::string why)
-{
-    return prepare_response(req, http::status::bad_request, std::move(why));
-};
-
-// Returns a not found response
-template <class Body, class Allocator>
-auto not_found(const http::request<Body, http::basic_fields<Allocator>>& req)
-{
-    return prepare_response(req, http::status::not_found, req.target());
-};
-
-// Returns a server error response
-template <class Body, class Allocator>
-auto server_error(const http::request<Body, http::basic_fields<Allocator>>& req,
-                  const std::string& what)
-{
-    return prepare_response(req, http::status::internal_server_error,
-                            std::string("An error occured: ") + what);
-};
-
-// Returns a success response
-template <class ResponseBody, class Body, class Allocator>
-auto success(const http::request<Body, http::basic_fields<Allocator>>& req,
-             ResponseBody&& body, std::string_view content_type = "text/html")
-{
-    return prepare_response(req, http::status::ok,
-                            std::forward<ResponseBody>(body), content_type);
-}
-
-template <class Body, class Allocator>
-http::message_generator handle_request(
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    beast::string_view doc_root)
-{
-    // Make sure we can handle the method
-    if (req.method() != http::verb::get && req.method() != http::verb::head)
-    {
-        return bad_request(req, "Unknown HTTP-method");
-    }
-
-    // Request path must be absolute and not contain "..".
-    if (req.target().empty() || req.target()[0] != '/' ||
-        req.target().find("..") != beast::string_view::npos)
-    {
-        return bad_request(req, "Illegal request-target");
-    }
-
-    // Build the path to the requested file
-    std::string path = path_cat(doc_root, req.target());
-    if (req.target().back() == '/')
-    {
-        path.append("index.html");
-    }
-
-    // Attempt to open the file
-    beast::error_code ec;
-    http::file_body::value_type body;
-    body.open(path.c_str(), beast::file_mode::scan, ec);
-
-    // Handle the case where the file doesn't exist
-    if (ec == beast::errc::no_such_file_or_directory)
-    {
-        return not_found(req);
-    }
-
-    // Handle an unknown error
-    if (ec)
-    {
-        return server_error(req, ec.message());
-    }
-
-    if (req.method() == http::verb::head)
-    {
-        // Respond to HEAD request
-        return success(req, body.size(), mime_type(path));
-    }
-    else
-    {
-        // Respond to GET request
-        return success(req, std::move(body), mime_type(path));
-    }
-}
-
-template <class Body, class Allocator>
-http::message_generator handle_api_request(
-    http::request<Body, http::basic_fields<Allocator>>&& req,
-    std::shared_ptr<TlsHttpCallbacks> tls_callbacks)
-{
-    // Make sure we can handle the method
-    if (req.method() != http::verb::get)
-    {
-        return bad_request(req, "Unknown API method");
-    }
-
-    if (req.target() == "/api/connect_postgre")
-    {
-        ;
-    }
-
-    if (req.target() == "/api/connection_details")
-    {
-        return success(req, tls_callbacks->collect_connection_details_as_json(),
-                       "application/json");
-    }
-
-    return not_found(req);
-}
-
-#ifdef HTTPS
-net::awaitable<void> do_session(tcp_stream stream,
-                                std::shared_ptr<Botan::TLS::Context> tls_ctx,
-                                std::shared_ptr<OCSP_Cache> ocsp_cache,
-                                std::string_view document_root)
-{
-    // This buffer is required to persist across reads
-    beast::flat_buffer buffer;
-
-    // Set up Botan's TLS stack
+    // TlsHttpCallbacks is still needed for OCSP and logging handshake details
     auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
-    Botan::TLS::Stream<tcp_stream> tls_stream(std::move(stream), std::move(tls_ctx), callbacks);
+
+    // Botan::Stream has a constructor that takes the Context directly
+    Botan::TLS::Stream<tcp_stream&> tls_stream(stream, ctx, callbacks);
 
     try
     {
-        // Perform a TLS handshake with the peer
         co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
- 
+
+        // TCP LAYER: Read/Write Loop
+        std::vector<uint8_t> buffer(16);
         for (;;)
         {
             // Set the timeout.
             tls_stream.next_layer().expires_after(std::chrono::seconds(30));
 
-            // Read a request
-            http::request<http::string_body> req;
+            // Read raw decrypted bytes
+            size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
 
-            co_await http::async_read(tls_stream, buffer, req);
+            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+            std::cout << std::endl;
 
-            // Handle the request
-            auto response = req.target().starts_with("/api")
-                                ? handle_api_request(std::move(req), callbacks)
-                                : handle_request(std::move(req), document_root);
+            // Log connection details once (optional)
+            std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
-            // Send the response
-            const auto keep_alive = response.keep_alive();
+            // Echo back to client using the TLS stream's native async send
+            size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
 
-            co_await beast::async_write(tls_stream, std::move(response), net::use_awaitable);
-
-            // Determine if we should close the connection
-            if (!keep_alive)
-            {
-                // This means we should close the connection, usually because
-                // the response indicated the "Connection: close" semantic.
-                break;
-            }
+            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
+            std::cout << std::endl;
         }
     }
-    catch (boost::system::system_error& se)
+    catch (const std::exception& e)
     {
-        if (se.code() != http::error::end_of_stream)
-        {
-            throw;
-        }
+        std::cout << e.what() << std::endl;
+        // Handle EOF or handshake failures gracefully
     }
 
     // Shut down the connection gracefully
     co_await tls_stream.async_shutdown();
-    beast::error_code ec;
-    tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send, ec);
+    tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send);
 
     // At this point the connection is closed gracefully
     // we ignore the error because the client might have
     // dropped the connection already.
 }
-#else
-    net::awaitable<void> do_session(
-        tcp_stream stream,
-        std::shared_ptr<Botan::TLS::Context> ctx,
-        std::shared_ptr<OCSP_Cache> ocsp_cache)
-    {
-        // TlsHttpCallbacks is still needed for OCSP and logging handshake details
-        auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
 
-        // Botan::Stream has a constructor that takes the Context directly
-        Botan::TLS::Stream<tcp_stream&> tls_stream(stream, ctx, callbacks);
-
-        try
-        {
-            co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
- 
-            // TCP LAYER: Read/Write Loop
-            std::vector<uint8_t> buffer(16);
-            for (;;)
-            {
-                // Set the timeout.
-                tls_stream.next_layer().expires_after(std::chrono::seconds(30));
-
-                // Read raw decrypted bytes
-                size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
- 
-                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
-                std::cout << std::endl;
-
-                // Log connection details once (optional)
-                std::cout << callbacks->collect_connection_details_as_json() << std::endl;
-
-                // Echo back to client using the TLS stream's native async send
-                size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
-
-                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
-                std::cout << std::endl;
-            }
-        }
-        catch (const std::exception& e)
-        {
-            std::cout << e.what() << std::endl;
-            // Handle EOF or handshake failures gracefully
-        }
-
-        // Shut down the connection gracefully
-        co_await tls_stream.async_shutdown();
-        tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_send);
-
-        // At this point the connection is closed gracefully
-        // we ignore the error because the client might have
-        // dropped the connection already.
-    }
-#endif
-
-#ifdef HTTPS
-    net::awaitable<void> do_listen(tcp::endpoint endpoint,
-                                std::shared_ptr<Botan::TLS::Context> tls_ctx,
-                                std::shared_ptr<OCSP_Cache> ocsp_cache,
-                                std::string_view document_root)
-    {
-        auto exec = co_await net::this_coro::executor;
-        tcp::acceptor acceptor(exec, endpoint);
- 
-        // If max_clients is zero in the beginning, we'll serve forever
-        // otherwise we'll count down and stop eventually.
-        for (;;)
-        {
-            // 3. Accept the new connection
-            auto socket = co_await acceptor.async_accept();
-
-            // 4. Spawn the session using the retrieved executor 'exec'
-            std::cout << "Spawn async task and wait again to accept connection again!" << std::endl;
-
-            boost::asio::co_spawn(
-                acceptor.get_executor(),
-                do_session(tcp_stream(std::move(socket)), tls_ctx,
-                        ocsp_cache, document_root),
-                make_final_completion_handler("Session"));
-        }
-    }
-#else
-    net::awaitable<void> do_listen(
+net::awaitable<void> do_listen(
         tcp::endpoint endpoint,
         std::shared_ptr<Botan::TLS::Context> tls_ctx,
         std::shared_ptr<OCSP_Cache> ocsp_cache) 
@@ -495,7 +168,7 @@ net::awaitable<void> do_session(tcp_stream stream,
             );
         }
     }
-#endif
+
 }  // namespace
 
 static void pretty_print(std::ostream& os, boost::json::value const& jv, std::string indent = "")
@@ -573,10 +246,6 @@ int main(int argc, char* argv[])
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
 
-#ifdef HTTPS
-        const auto document_root = vm["document-root"].as<std::string>();
-#endif
-
         auto creds =
             std::make_shared<Basic_Credentials_Manager>(certificate, key);
         auto rng = std::make_shared<Botan::AutoSeeded_RNG>();
@@ -590,19 +259,6 @@ int main(int argc, char* argv[])
 
         std::cout << "Spawn bind connection in async task and go to next code!" << std::endl;
 
-#ifdef HTTPS
-        boost::asio::co_spawn(
-            io,
-            do_listen(
-                tcp::endpoint{address, port},
-                std::make_shared<Botan::TLS::Context>(creds, rng, session_mgr, tls_policy),
-                std::make_shared<OCSP_Cache>(
-                    std::chrono::minutes(vm["ocsp-cache-time"].as<uint64_t>()),
-                    std::chrono::seconds(vm["ocsp-request-timeout"].as<uint64_t>())),
-                document_root),
-            make_final_completion_handler("Acceptor")
-        );
-#else
         boost::asio::co_spawn(
             io,
             do_listen(
@@ -614,7 +270,6 @@ int main(int argc, char* argv[])
             ),
             make_final_completion_handler("Acceptor")
         );
-#endif
 
         // Add thread pool to IO context asio scheduler.
         std::vector<std::jthread> threads;
