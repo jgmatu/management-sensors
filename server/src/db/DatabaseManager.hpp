@@ -46,6 +46,4 @@ private:
     // DEBEN adquirir este mutex antes de desreferenciar el puntero.
     std::unique_ptr<pqxx::connection> connection_;
     mutable std::mutex conn_mutex_; 
-
-    std::atomic<bool> stop_listener_{false};
 };

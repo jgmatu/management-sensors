@@ -104,9 +104,6 @@ void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::ob
 
 void DatabaseManager::listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) 
 {
-    // Reset stop signal before starting
-    stop_listener_.store(false);
-
     // Assign the thread to the member variable
     listener_thread_ = std::jthread([this, channel, callback](std::stop_token st) 
     {
@@ -128,7 +125,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                 });
             }
             // Use the stop_token (st) to check if we should exit
-            while (!stop_listener_.load() && !st.stop_requested()) 
+            for (;;)
             {
                 std::cout << "Waiting for notification..." << std::endl;
                 
