@@ -23,10 +23,10 @@ firewall-cmd --reload
 echo "Starting Mosquitto service..."
 systemctl enable --now mosquitto
 
-# 5. Check Status
-if systemctl is-active --quiet mosquitto; then
-    echo "SUCCESS: Mosquitto is running on port 1883."
-else
-    echo "ERROR: Mosquitto failed to start. Check 'journalctl -u mosquitto'"
+# 5. Check Status and Exit with Error if not running
+if ! systemctl is-active --quiet mosquitto; then
+    echo "ERROR: Mosquitto failed to start. Check 'journalctl -u mosquitto'" >&2
     exit 1
 fi
+
+echo "SUCCESS: Mosquitto is running on port 1883."
