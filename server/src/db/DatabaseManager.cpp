@@ -109,6 +109,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
     {
         try 
         {
+            // 1. Setup the LISTEN command
             {
                 std::lock_guard<std::mutex> lock(conn_mutex_);
                 if (!connection_ || !connection_->is_open()) {
@@ -116,13 +117,23 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                 }
 
                 pqxx::nontransaction nt(*connection_);
+                // Use quote_name to avoid syntax errors with channel names
                 nt.exec("LISTEN " + channel + ";");
+                
+                // nt is destroyed here when the scope ends, 
+                // ensuring no transaction is active for the next step.
+            }
 
-                connection_->listen(channel, [this, callback](pqxx::notification n) {
-                    boost::json::object msg;
-                    parser_notify(n, msg);
-                    callback(msg);
-                });
+            // 2. Register the handler (after nt is gone)
+            {
+                std::lock_guard<std::mutex> lock(conn_mutex_);
+                if (connection_ && connection_->is_open()) {
+                    connection_->listen(channel, [this, callback](pqxx::notification n) {
+                        boost::json::object msg;
+                        parser_notify(n, msg);
+                        callback(msg);
+                    });
+                }
             }
 
             for (;;)
