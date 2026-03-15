@@ -180,14 +180,20 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             }
             std::cout << "Listener thread stopping gracefully." << std::endl;
         }
+        catch (const pqxx::broken_connection& e) {
+            /* 
+             * EXPECTED DISCONNECTION SIGNAL:
+             * This occurs when disconnect() is called or the DB server drops the socket.
+             * We treat this as a signal to finalize the thread gracefully.
+             */
+            std::cerr << "[DB-Listener] Connection closed or lost: " << e.what() << std::endl;
+        }
         catch (const std::exception& e) {
             /* 
-             * SEÑALIZACIÓN DE PARADA POR DESCONEXIÓN:
-             * Se captura broken_connection como un evento esperado de finalización.
-             * Esto ocurre cuando otra clase invoca disconnect() o el socket se cierra.
-             * El hilo interpreta este error como una orden de terminación inmediata.
+             * UNEXPECTED CRITICAL ERROR:
+             * Handle other logic errors (JSON parsing, bad SQL, etc.)
              */
-            std::cerr << "Listener error: " << e.what() << std::endl;
+            std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
         }
         std::cout << "Listener database thread exiting." << std::endl;
     });
