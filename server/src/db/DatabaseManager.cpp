@@ -127,13 +127,15 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             // 2. Register the handler (after nt is gone)
             {
                 std::lock_guard<std::mutex> lock(conn_mutex_);
-                if (connection_ && connection_->is_open()) {
-                    connection_->listen(channel, [this, callback](pqxx::notification n) {
-                        boost::json::object msg;
-                        parser_notify(n, msg);
-                        callback(msg);
-                    });
+                if (!connection_ || !connection_->is_open()) {
+                    throw std::runtime_error("Database connection is not established.");
                 }
+
+                connection_->listen(channel, [this, callback](pqxx::notification n) {
+                    boost::json::object msg;
+                    parser_notify(n, msg);
+                    callback(msg);
+                });
             }
 
             for (;;)
