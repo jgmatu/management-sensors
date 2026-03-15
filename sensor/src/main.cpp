@@ -45,7 +45,7 @@ int main() {
             std::cout << "Sending: " << payload << std::endl;
             client.publish(TOPIC, payload, 1, false)->wait();
 
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     }
     catch (const std::exception& e) {
