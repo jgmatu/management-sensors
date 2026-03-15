@@ -5,8 +5,31 @@
 DatabaseManager::DatabaseManager(const std::string& connection_str) 
         : conn_str_(connection_str) {}
 
+DatabaseManager::~DatabaseManager()
+{
+    std::cout << "[DB] Destructor called: Starting graceful cleanup..." << std::endl;
+
+    // 1. Cerrar la conexión física
+    // Esto despertará a wait_notification() con una excepción broken_connection
+    // permitiendo que el jthread salga de su bucle.
+    disconnect();
+
+    // 2. Sincronizar hilos
+    // jthread hace join automático, pero llamarlo aquí asegura 
+    // que el objeto no termine de destruirse hasta que el hilo de escucha muera.
+    if (listener_thread_.joinable())
+    {
+        listener_thread_.request_stop(); // Señal adicional de C++20
+        listener_thread_.join();
+    }
+
+    // Aqui si puedo liberar el puntero y evitar cualquier acceso futuro a connection_.
+    connection_.reset();
+    std::cout << "[DB] Cleanup complete. Resources released." << std::endl;
+}
+
 // Establish connection
-void DatabaseManager::connect() 
+void DatabaseManager::connect()
 {
     // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_.
     std::lock_guard<std::mutex> lock(conn_mutex_); 
@@ -44,43 +67,44 @@ void DatabaseManager::disconnect()
     {
         std::cerr << "Error during disconnect: " << e.what() << std::endl;
     }
-
-    // Importante: Resetear el smart pointer para dejarlo en estado nulo
-    connection_.reset();
 }
 
 boost::json::object DatabaseManager::get_sanity_info()
 {
     boost::json::object info;
+    
+    // Acquire lock to ensure connection_ isn't being reset by another thread
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+    
+    if (!connection_ || !connection_->is_open()) {
+        info["error"] = "Database connection not available";
+        return info;
+    }
+
     try
     {
+        // Use a nontransaction for read-only sanity checks
         pqxx::nontransaction ntxn(*connection_);
 
         // 1. Get PostgreSQL Server Version
         pqxx::row pg_ver = ntxn.exec("SELECT version();").one_row();
         info["postgres_version"] = pg_ver[0].c_str();
 
-        // 2. Get SSL Status & Cipher (Fixed function name to ssl_version)
-        pqxx::result ssl_info = ntxn.exec(
-            "SELECT ssl_is_used(), ssl_cipher(), ssl_version();"
-        );
+        // 2. Get Database Uptime (useful for health checks)
+        pqxx::row uptime = ntxn.exec("SELECT now() - pg_postmaster_start_time();").one_row();
+        info["db_uptime"] = uptime[0].c_str();
 
-        if (!ssl_info.empty()) {
-            bool is_used = ssl_info[0][0].as<bool>();
-            info["ssl_active"] = is_used;
-            
-            // Safe check for NULL values before calling .c_str()
-            info["ssl_cipher"] = !ssl_info[0][1].is_null() ? ssl_info[0][1].c_str() : "none";
-            info["ssl_protocol"] = !ssl_info[0][2].is_null() ? ssl_info[0][2].c_str() : "none";
-        }
+        // 3. Current connection backend PID
+        info["backend_pid"] = connection_->backendpid();
 
-        // 3. Client Library Info
-        info["libpq_compile_version"] = PQXX_VERSION;
+        // 4. pqxx Library Info
+        info["pqxx_version"] = PQXX_VERSION;
 
         return info;
-    } catch (const std::exception& e) {
-        // Log locally and return the error in the JSON object
-        std::cerr << "Sanity Check Failed: " << e.what() << std::endl;
+    } 
+    catch (const std::exception& e) 
+    {
+        std::cerr << "[DB-Sanity] Check Failed: " << e.what() << std::endl;
         info["error"] = e.what();
         return info;
     }
@@ -109,6 +133,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
     {
         try 
         {
+            // 1. Setup the LISTEN command
             {
                 std::lock_guard<std::mutex> lock(conn_mutex_);
                 if (!connection_ || !connection_->is_open()) {
@@ -116,7 +141,19 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                 }
 
                 pqxx::nontransaction nt(*connection_);
+                // Use quote_name to avoid syntax errors with channel names
                 nt.exec("LISTEN " + channel + ";");
+
+                // nt is destroyed here when the scope ends, 
+                // ensuring no transaction is active for the next step.
+            }
+
+            // 2. Register the handler (after nt is gone)
+            {
+                std::lock_guard<std::mutex> lock(conn_mutex_);
+                if (!connection_ || !connection_->is_open()) {
+                    throw std::runtime_error("Database connection is not established.");
+                }
 
                 connection_->listen(channel, [this, callback](pqxx::notification n) {
                     boost::json::object msg;
@@ -144,7 +181,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             std::cout << "Listener thread stopping gracefully." << std::endl;
         }
         catch (const std::exception& e) {
-           /* 
+            /* 
              * SEÑALIZACIÓN DE PARADA POR DESCONEXIÓN:
              * Se captura broken_connection como un evento esperado de finalización.
              * Esto ocurre cuando otra clase invoca disconnect() o el socket se cierra.
