@@ -26,21 +26,35 @@ desacoplar el Proceso de Servicio (API) del Controlador de Sensores (MQTT):
 LÓGICA RELACIONAL (Jerarquía de Datos):
 1. [CAPA DE SEGURIDAD]  sensor_certs: 
    - Raíz de confianza y gestión de identidades X.509 (Formato PEM).
-   
+   - Base de la pirámide: sin certificado válido, no existe nodo.
+
 2. [CAPA DE IDENTIDAD]   sensor_config: 
    - Vínculo lógico-físico. Define la "Realidad Confirmada" del nodo.
+   - Representa el estado actual exitoso del sensor en la red.
+
+3. [CAPA DE COMUNICACIÓN] sensor_config_pending:
+   - Capa de "Estado Deseado" (Desired State). 
+   - Relación 1:1 con sensor_config que actúa como cola de comandos.
+   - Solo existe si hay una discrepancia entre el Servidor y el Sensor.
+
+4. [CAPA DE RETROALIMENTACIÓN] sensor_config_errors:
+   - Registro histórico de excepciones y fallos de aplicación.
+   - Relación 1:N con sensor_config para trazabilidad de problemas técnicos.
    
-3. [CAPA DE ESTADO]      sensor_state: 
-   - Telemetría efímera. Optimizado para acceso en tiempo constante (O(1)).
+5. [CAPA DE ESTADO]      sensor_state: 
+   - Telemetría efímera (Datos operativos).
+   - Optimizado para acceso en tiempo constante (O(1)) al último valor conocido.
 
 ARQUITECTURA REACTIVA (Mecanismo NOTIFY/LISTEN):
 La base de datos emite notificaciones en canales aislados para sincronización 
 inmediata, eliminando la necesidad de consultas constantes (polling):
 
-- config_requested: Aviso al Controlador MQTT de que hay trabajo pendiente.
+- config_requested: Aviso al Controlador MQTT de que hay trabajo pendiente en 'pending'.
+- config_confirmed: Aviso al Servidor de que la configuración se aplicó con éxito 
+                    (Emitido tras actualizar 'sensor_config' y limpiar 'pending').
 - config_errors:    Aviso al Servidor de que una configuración ha fallado.
 - state_events:     Actualizaciones de telemetría en tiempo real.
-- cert_events:      Eventos de seguridad y revocación.
+- cert_events:      Eventos de seguridad y revocación de identidades.
 
 NOTA FINAL SOBRE INTEGRIDAD:
 Implementa integridad referencial estricta. El borrado en cascada (ON DELETE CASCADE) 
@@ -48,7 +62,6 @@ y la limpieza atómica de la tabla 'pending' tras el éxito aseguran que el sist
 nunca mantenga estados incoherentes entre la intención y la realidad.
 =============================================================================
 */
-
 
 -- ==========================================================
 -- 1. LIMPIEZA TOTAL (DROP)
