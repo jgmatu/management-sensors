@@ -15,7 +15,7 @@ public:
 
     DatabaseManager(const std::string& connection_str);
 
-    virtual ~DatabaseManager() = default;
+    virtual ~DatabaseManager();
 
     // Establish connection
     void connect();
