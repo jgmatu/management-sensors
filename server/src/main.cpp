@@ -113,9 +113,9 @@ int main(int argc, char* argv[])
         std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
         db.listen_async("state_events", [](boost::json::object msg)
         {
-            std::cout << "Received notification on channel: " << msg["channel"].as_string() << ": " << std::endl;
-            JsonUtils::print(std::cout, msg);
-            std::cout << std::endl;
+             std::cout << "Received notification on channel: " << msg["channel"].as_string() << ": " << std::endl;
+             JsonUtils::print(std::cout, msg);
+             std::cout << std::endl;
         });
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)

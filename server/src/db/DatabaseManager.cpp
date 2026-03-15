@@ -44,9 +44,6 @@ void DatabaseManager::disconnect()
     {
         std::cerr << "Error during disconnect: " << e.what() << std::endl;
     }
-
-    // Importante: Resetear el smart pointer para dejarlo en estado nulo
-    connection_.reset();
 }
 
 boost::json::object DatabaseManager::get_sanity_info()
