@@ -7,8 +7,6 @@
 #include <mqtt/async_client.h> // Using async_client for better performance
 #include <db/DatabaseManager.hpp>
 
-#define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/server/certs/ca.pem"
-
 const std::string ADDRESS { "tcp://localhost:1883" };
 const std::string CLIENT_ID { "cpp_subscriber_client" };
 const std::string TOPIC { "test/topic" };

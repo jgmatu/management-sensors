@@ -80,14 +80,14 @@ find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 find_package(Threads REQUIRED)
 
 # 2. Define the executable and its source files
-add_executable(broker 
+add_executable(controller 
     src/main.cpp
     src/db/DatabaseManager.cpp
 )
 
 # 3. Include directories
 # 'include' is for public headers, 'src' for private ones
-target_include_directories(broker
+target_include_directories(controller
     PUBLIC 
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE 
@@ -96,7 +96,7 @@ target_include_directories(broker
 
 # 4. Link Libraries
 # - PahoMqttCpp::paho-mqttpp3: The MQTT library
-target_link_libraries(broker 
+target_link_libraries(controller 
     PRIVATE 
         # 1. High-level C++ wrappers first
         pqxx::pqxx                 
