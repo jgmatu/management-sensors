@@ -25,7 +25,8 @@ int main() {
     std::default_random_engine generator;
     std::uniform_real_distribution<double> distribution(30.0, 80.0);
 
-    try {
+    try
+    {
         std::cout << "Connecting CPU Node: " << CLIENT_ID << "..." << std::endl;
         client.connect(connOpts)->wait();
 
@@ -45,10 +46,12 @@ int main() {
             std::cout << "Sending: " << payload << std::endl;
             client.publish(TOPIC, payload, 1, false)->wait();
 
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            // 800ms interval like real sensor latency
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));
         }
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e)
+    {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }

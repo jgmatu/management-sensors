@@ -228,3 +228,33 @@
 2026-03-15 16:36:53.305 CET [6796] LOG:  checkpoint complete: wrote 118 buffers (0.7%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=11.818 s, sync=0.006 s, total=11.839 s; sync files=68, longest=0.002 s, average=0.001 s; distance=838 kB, estimate=2230 kB; lsn=0/4231188, redo lsn=0/42310F8
 2026-03-15 17:08:01.811 CET [9790] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
 2026-03-15 17:08:01.811 CET [9790] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:35:17.508 CET [18000] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:35:17.508 CET [18000] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:35:21.059 CET [18047] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:35:21.059 CET [18047] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:35:23.490 CET [18084] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:35:23.490 CET [18084] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:36:08.501 CET [18219] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:36:08.501 CET [18219] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:36:10.604 CET [18256] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:36:10.604 CET [18256] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:43:37.384 CET [19016] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:43:37.384 CET [19016] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:45:08.640 CET [19208] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:45:08.640 CET [19208] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:45:35.258 CET [19315] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:45:35.258 CET [19315] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:48:36.704 CET [19477] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:48:36.704 CET [19477] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:54:16.720 CET [20011] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:54:16.720 CET [20011] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:54:35.758 CET [20093] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:54:35.758 CET [20093] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:55:37.113 CET [20324] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:55:37.113 CET [20324] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:55:57.492 CET [20413] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:55:57.492 CET [20413] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:57:33.640 CET [20630] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:57:33.640 CET [20630] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
+2026-03-15 17:57:54.533 CET [20699] ERROR:  could not access file "sslinfo": No existe el fichero o el directorio
+2026-03-15 17:57:54.533 CET [20699] STATEMENT:  SELECT ssl_is_used(), ssl_cipher(), ssl_version();
