@@ -8,16 +8,16 @@ using tcp_stream = typename boost::beast::tcp_stream::rebind_executor<
  */
 QuantumSafeTlsEngine::QuantumSafeTlsEngine(uint16_t port,  const std::string& cert_path, 
     const std::string& key_path, const std::string& policy_path, uint64_t ocsp_cache_time,
-        uint64_t ocsp_timeout)
+        uint64_t ocsp_timeout) :
+        processor_(nullptr)
 {
     creds_ = std::make_shared<Basic_Credentials_Manager>(cert_path, key_path);
     rng_ = std::make_shared<Botan::AutoSeeded_RNG>();
     session_mgr_ = std::make_shared<Botan::TLS::Session_Manager_In_Memory>(rng_);
     tls_policy_ = load_tls_policy(policy_path);
     tls_context_ = std::make_shared<Botan::TLS::Context>(creds_, rng_, session_mgr_, tls_policy_);
-    ocsp_cache_ = std::make_shared<OCSP_Cache>(
-                    std::chrono::minutes(ocsp_cache_time),
-                    std::chrono::seconds(ocsp_timeout));
+    ocsp_cache_ = std::make_shared<OCSP_Cache>(std::chrono::minutes(ocsp_cache_time),
+        std::chrono::seconds(ocsp_timeout));
     endpoint_ = boost::asio::ip::tcp::endpoint(boost::asio::ip::make_address("0.0.0.0"), port);
 
     // Inicialización del atributo de clase con el hint de hilos
@@ -43,7 +43,7 @@ void QuantumSafeTlsEngine::initialize()
         for (size_t i = 0; i < num_threads; ++i)
         {
             thread_pool_.emplace_back([this]() { 
-                io_context_->run(); 
+                io_context_->run();
             });
         }
 
@@ -88,48 +88,6 @@ void QuantumSafeTlsEngine::stop()
     std::cout << "[PQC-Engine] Orchestrated shutdown complete." << std::endl;
 }
 
-std::shared_ptr<Botan::TLS::Policy> QuantumSafeTlsEngine::load_tls_policy(
-    const std::string& policy_type)
-{
-    if (policy_type == "default" || policy_type.empty())
-    {
-        return std::make_shared<Botan::TLS::Policy>();
-    }
-
-    // if something we don't recognize, assume it's a file
-    std::ifstream policy_stream(policy_type);
-    if (!policy_stream.good())
-    {
-        throw std::runtime_error(
-            "Unknown TLS policy: not a file or known short name");
-    }
-
-    return std::make_shared<Botan::TLS::Text_Policy>(policy_stream);
-}
-
-std::function<void(std::exception_ptr)> QuantumSafeTlsEngine::make_final_completion_handler(const std::string& context)
-{
-    return [=](std::exception_ptr e)
-    {
-        if (e)
-        {
-            try
-            {
-                std::rethrow_exception(std::move(e));
-            }
-            catch (const std::exception& ex)
-            {
-                const auto now = std::chrono::system_clock::now();
-                const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
-                
-                // Nota: std::ctime añade un salto de línea al final
-                std::cerr << std::ctime(&t_c) << " " << context << ": "
-                          << ex.what() << std::endl;
-            }
-        }
-    };
-}
-
 boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
     tcp_stream stream,
     std::shared_ptr<Botan::TLS::Context> ctx,
@@ -161,11 +119,19 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
             // Read raw decrypted bytes
             size_t n = co_await tls_stream.async_read_some(boost::asio::buffer(buffer));
 
-            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
+              // 2. PROCESS: Modify/Generate response using the handler
+            std::vector<uint8_t> response;
+            if (processor_)
+            {
+                // Slice the buffer to match only the received 'n' bytes
+                std::vector<uint8_t> incoming(buffer.begin(), buffer.begin() + n);
+                response = processor_(incoming);
+            }
 
-            // Echo back to client using the TLS stream's native async send
-            size_t bytes_sent = co_await tls_stream.async_write_some(boost::asio::buffer(buffer.data(), n));
-
+            // 3. WRITE: Send the processed response back
+            if (!response.empty()) {
+                co_await tls_stream.async_write_some(boost::asio::buffer(response));
+            }
             std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
         }
     }
@@ -208,4 +174,46 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_listen(
             make_final_completion_handler("session")
         );
     }
+}
+
+std::shared_ptr<Botan::TLS::Policy> QuantumSafeTlsEngine::load_tls_policy(
+    const std::string& policy_type)
+{
+    if (policy_type == "default" || policy_type.empty())
+    {
+        return std::make_shared<Botan::TLS::Policy>();
+    }
+
+    // if something we don't recognize, assume it's a file
+    std::ifstream policy_stream(policy_type);
+    if (!policy_stream.good())
+    {
+        throw std::runtime_error(
+            "Unknown TLS policy: not a file or known short name");
+    }
+
+    return std::make_shared<Botan::TLS::Text_Policy>(policy_stream);
+}
+
+std::function<void(std::exception_ptr)> QuantumSafeTlsEngine::make_final_completion_handler(const std::string& context)
+{
+    return [=](std::exception_ptr e)
+    {
+        if (e)
+        {
+            try
+            {
+                std::rethrow_exception(std::move(e));
+            }
+            catch (const std::exception& ex)
+            {
+                const auto now = std::chrono::system_clock::now();
+                const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
+                
+                // Nota: std::ctime añade un salto de línea al final
+                std::cerr << std::ctime(&t_c) << " " << context << ": "
+                          << ex.what() << std::endl;
+            }
+        }
+    };
 }

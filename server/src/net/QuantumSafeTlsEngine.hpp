@@ -202,7 +202,13 @@ public:
      */
     void join();
 
-    private:
+    using SessionProcessor = std::function<std::vector<uint8_t>(const std::vector<uint8_t>& input)>;
+
+    void set_processor(SessionProcessor proc) { 
+        processor_ = std::move(proc);
+    }
+
+private:
     std::shared_ptr<Botan::TLS::Policy> load_tls_policy(
         const std::string& policy_type);
 
@@ -219,6 +225,8 @@ public:
             std::shared_ptr<Botan::TLS::Context> tls_ctx,
             std::shared_ptr<OCSP_Cache> ocsp_cache);
 
+    // Handler para procesar datos de la sesión, inyectable para flexibilidad
+    SessionProcessor processor_;
 
     // Botan Core
     std::shared_ptr<Botan::AutoSeeded_RNG> rng_;

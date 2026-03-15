@@ -38,12 +38,53 @@
 
 // #define SESSION_EXPIRED_TIMEOUT
 
-namespace
-{
+/**
+ * @brief Main logic processor for decrypted TLS traffic.
+ * Processes the incoming buffer and returns the data to be sent back.
+ */
+std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
+    if (input.empty()) return {};
 
+    // 1. Convert input to string for easy parsing/logging
+    std::string request(input.begin(), input.end());
+    std::cout << "[PQC-Logic] Processing request: " << request << std::endl;
 
+    std::string response;
 
-}  // namespace
+    // 2. Business Logic: Decision tree based on PQC input
+    if (request.find("PING") != std::string::npos) {
+        response = "PONG";
+    } else if (request.find("STATUS") != std::string::npos) {
+        response = "SYSTEM_OK_PQC_ACTIVE";
+    } else {
+        // Default behavior: Echo with a prefix
+        response = "ACK: " + request;
+    }
+
+    // 3. Return the response as raw bytes for the TLS Engine
+    return std::vector<uint8_t>(response.begin(), response.end());
+}
+
+/**
+ * @brief Logic handler for Database NOTIFY events.
+ * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ */
+void on_db_event_received(boost::json::object msg) {
+    if (msg.empty()) return;
+
+    // 1. Extract the channel for logging
+    std::string_view channel = msg.at("channel").as_string();
+    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
+
+    // 2. Use your existing JsonUtils to print the payload
+    JsonUtils::print(std::cout, msg);
+    std::cout << std::endl;
+
+    // 3. Example Logic: If it's an 'alarm' type, log it specifically
+    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
+        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -90,8 +131,9 @@ int main(int argc, char* argv[])
         const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
 
         QuantumSafeTlsEngine server(port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
-        server.initialize();
+        server.set_processor(on_tls_message_process);
 
+        server.initialize();
         {
             // Ejemplo con Keep-Alive activo
             DatabaseManager db(
@@ -112,12 +154,7 @@ int main(int argc, char* argv[])
             std::cout << std::endl;
 
             std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
-            db.listen_async("state_events", [](boost::json::object msg)
-            {
-                std::cout << "Received notification on channel: " << msg["channel"].as_string() << ": " << std::endl;
-                JsonUtils::print(std::cout, msg);
-                std::cout << std::endl;
-            });
+            db.listen_async("state_events", on_db_event_received);
 
             // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
             server.join();
