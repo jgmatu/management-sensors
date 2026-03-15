@@ -124,13 +124,21 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                     callback(msg);
                 });
             }
-            // Use the stop_token (st) to check if we should exit
+
             for (;;)
             {
+               // Data available: let libpqxx process it
+                // If the connection is broken, this will throw pqxx::broken_connection
                 std::cout << "Waiting for notification..." << std::endl;
-                
-                // wait_notification() blocks, but jthread destructor or 
-                // .request_stop() will signal the stop_token.
+                /*
+                    Hacking note: libpqxx's wait_notification() is designed to be
+                    efficient and will internally use select() or poll() on the PostgreSQL socket.
+
+                    * Note: wait_notification() is a blocking call that internally uses select() or poll()
+                    * on the PostgreSQL socket. It will return when a notification is received or if the
+                    * connection is lost. If the connection is lost, it will throw an exception which we catch
+                    * to handle reconnection logic if needed.
+                */
                 connection_->wait_notification();
             }
             std::cout << "Listener thread stopping gracefully." << std::endl;
