@@ -105,7 +105,6 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
     {
         co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
 
-
         // Log connection details once (optional)
         std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 

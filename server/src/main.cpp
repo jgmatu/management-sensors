@@ -46,10 +46,20 @@ struct SensorCommand {
     bool valid = false;
 };
 
-
 /**
  * @brief Improved parser for sensor CLI syntax.
  * Handles trailing spaces, malformed IDs, and stream fail states.
+ * 
+ * @note MEMORY SAFETY & PERFORMANCE:
+ * This function returns the 'SensorCommand' struct by value. Thanks to 
+ * **RVO (Return Value Optimization)** and **Copy Elision** (standard in C++20/GCC 14), 
+ * the compiler constructs the object directly in the caller's stack frame. 
+ * This avoids expensive copies and eliminates the risk of **Segmentation Faults** 
+ * or "Dangling Pointers" typically associated with returning pointers to 
+ * local stack variables.
+ * 
+ * @param request The raw string received from the TLS session.
+ * @return A self-contained SensorCommand object.
  */
 SensorCommand parse_sensor_command(const std::string& request) {
     SensorCommand sc;
