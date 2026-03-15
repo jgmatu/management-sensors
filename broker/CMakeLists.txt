@@ -70,6 +70,9 @@ set_target_properties(OpenSSL::Crypto PROPERTIES
     IMPORTED_LOCATION             "/usr/local/lib64/libcrypto.a"
 )
 
+# 1. Find the Mosquitto library on your system
+find_library(MOSQUITTO_LIB mosquitto)
+
 set(Boost_USE_STATIC_LIBS ON)
 # Ensure your Boost installation path is in CMAKE_PREFIX_PATH if not in /usr
 find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)

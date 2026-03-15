@@ -22,21 +22,6 @@ void DatabaseManager::connect()
     }
 }
 
-    // Example: Execute a simple query
-void DatabaseManager::execute(const std::string& sql)
-{
-    pqxx::work txn(*connection_); // Starts a transaction
-    txn.exec(sql);
-    txn.commit(); // Explicitly commit
-}
-
-// Example: Fetch data (returns a result set)
-pqxx::result DatabaseManager::query(const std::string& sql)
-{
-    pqxx::nontransaction ntxn(*connection_); // Read-only, no transaction overhead
-    return ntxn.exec(sql);
-}
-
 boost::json::object DatabaseManager::get_sanity_info()
 {
     boost::json::object info;
