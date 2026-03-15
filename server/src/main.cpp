@@ -106,6 +106,10 @@ net::awaitable<void> do_session(
     {
         co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
 
+
+        // Log connection details once (optional)
+        std::cout << callbacks->collect_connection_details_as_json() << std::endl;
+
         // TCP LAYER: Read/Write Loop
         std::vector<uint8_t> buffer(16);
         for (;;)
@@ -117,16 +121,11 @@ net::awaitable<void> do_session(
             size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
 
             std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
-            std::cout << std::endl;
-
-            // Log connection details once (optional)
-            std::cout << callbacks->collect_connection_details_as_json() << std::endl;
 
             // Echo back to client using the TLS stream's native async send
             size_t bytes_sent = co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
 
             std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
-            std::cout << std::endl;
         }
     }
     catch (const std::exception& e)
