@@ -1,13 +1,28 @@
 #!/bin/bash
-# 10ms is very fast for psql overhead, so we use a small sleep
-echo "Starting 10ms stream... Press Ctrl+C to stop."
+
+# Configuración
+DB_NAME="javi"
+INTERVALO_SEGUNDOS=2
+BASE_TEMP=20
+RANGO=10  # Variación total de 10 grados
+
+echo "Iniciando simulador de telemetría en tabla: sensor_state..."
+echo "Presiona [CTRL+C] para detener."
 
 while true; do
-  # Use -c to run the command and -q for quiet mode
-  psql -d javi -c "UPDATE articles SET stock_count = stock_count + 1 WHERE name = 'cafe';" > /dev/null 2>&1
-  psql -d javi -c "UPDATE articles SET stock_count = stock_count + 1 WHERE name = 'balloons';" > /dev/null 2>&1
-  psql -d javi -c "UPDATE articles SET stock_count = stock_count + 1 WHERE name = 'espresso';" > /dev/null 2>&1
+    # Generamos los updates para 3 sensores distintos
+    for ID in 1 2 3; do
+        # SQL: Calcula una temp aleatoria entre 15.0 y 25.0 y actualiza el timestamp
+        QUERY="UPDATE sensor_state 
+               SET current_temp = ($BASE_TEMP + (random() * $RANGO - ($RANGO / 2)))::numeric(5,2),
+                   last_update = CURRENT_TIMESTAMP 
+               WHERE sensor_id = $ID;"
 
-  # sleep 0.01 is 10ms
-  sleep 0.01
+        psql -d "$DB_NAME" -c "$QUERY" > /dev/null 2>&1
+    done
+
+    echo "Sent: Update telemetry for sensors at $(date +%T)"
+    
+    # Pausa para no saturar la base de datos
+    sleep "$INTERVALO_SEGUNDOS"
 done

@@ -264,7 +264,7 @@ int main(int argc, char* argv[])
         std::cout << std::endl;
 
         std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
-        db.listen_async("articles_channel", [](boost::json::object msg)
+        db.listen_async("state_events", [](boost::json::object msg)
         {
             std::cout << "Received notification on channel: " << msg["channel"].as_string() << ": " << std::endl;
             JsonUtils::print(std::cout, msg);
