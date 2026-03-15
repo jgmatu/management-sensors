@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(testserver LANGUAGES CXX)
+project(server LANGUAGES CXX)
 
 # -----------------------------------------------------------------------------
 # 1. Manual Library Imports (Custom Installations)
@@ -96,12 +96,9 @@ target_link_libraries(${PROJECT_NAME}
         PostgreSQL::libpq
         PostgreSQL::libpgcommon
         PostgreSQL::libpgport
+
         Botan::Botan
         Boost::program_options
         Boost::json
         Threads::Threads
-
-        # --- PROVEEDORES DE SÍMBOLOS (Al final) ---
-        OpenSSL::SSL            # Resuelve símbolos de libpq y libpgcommon
-        OpenSSL::Crypto         # Resuelve símbolos de SSL y libpgport
 )

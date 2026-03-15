@@ -36,7 +36,6 @@
 
 #include <json/JsonUtils.hpp>
 
-#define DATABASE_CERT "/home/javi/OpenSource/botan-tls-testserver/server/certs/ca.pem"
 #define HTTPS
 
 namespace
@@ -630,8 +629,6 @@ int main(int argc, char* argv[])
             "password=12345678 "
             "host=localhost "
             "port=5432 "
-            "sslmode=verify-full "      // Fuerza SSL y verifica el certificado del servidor
-            "sslrootcert=" DATABASE_CERT " " // Ruta al certificado de la CA (opcional según modo)
             "keepalives=1 "             // Activa Keep-Alive a nivel de TCP
             "keepalives_idle=60 "       // Segundos antes de enviar el primer keepalive
             "keepalives_interval=5 "    // Segundos entre reintentos si no hay respuesta
