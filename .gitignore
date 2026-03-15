@@ -8,6 +8,7 @@
 *.exe
 bin/
 lib/
+logfile
 
 # --- CMake & Build Directories ---
 # Ignore the entire build folder where you run ninja
