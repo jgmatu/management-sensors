@@ -36,7 +36,7 @@
 
 #include <json/JsonUtils.hpp>
 
-#define HTTPS
+//#define HTTPS
 
 namespace
 {
@@ -414,7 +414,7 @@ net::awaitable<void> do_session(tcp_stream stream,
                 // Read raw decrypted bytes
                 size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
  
-                std::copy(buffer.begin(), buffer.enocsp_cache.cppd(), std::ostream_iterator< char>(std::cout, " "));
+                std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, " "));
                 std::cout << std::endl;
 
                 // Log connection details once (optional)
@@ -589,6 +589,7 @@ int main(int argc, char* argv[])
         auto address = net::ip::make_address("0.0.0.0");
 
         std::cout << "Spawn bind connection in async task and go to next code!" << std::endl;
+
 #ifdef HTTPS
         boost::asio::co_spawn(
             io,
