@@ -68,7 +68,7 @@ void QuantumSafeTlsEngine::join()
             thread.join();
         }
     }
-    
+
     std::cout << "[PQC-Engine] All threads joined. Process can now exit." << std::endl;
 }
 

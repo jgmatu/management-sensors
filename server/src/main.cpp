@@ -120,6 +120,7 @@ int main(int argc, char* argv[])
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
         server.join();
+
         server.stop();
 
         // 1. Iniciamos el cierre físico de la conexión.

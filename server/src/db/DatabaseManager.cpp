@@ -5,6 +5,32 @@
 DatabaseManager::DatabaseManager(const std::string& connection_str) 
         : conn_str_(connection_str) {}
 
+DatabaseManager::~DatabaseManager()
+{
+    std::cout << "[DB] Destructor called: Starting graceful cleanup..." << std::endl;
+
+    // 1. Activar señal de parada lógica
+    stop_listener_.store(true);
+
+    // 2. Cerrar la conexión física
+    // Esto despertará a wait_notification() con una excepción broken_connection
+    // permitiendo que el jthread salga de su bucle.
+    disconnect();
+
+    // 3. Sincronizar hilos
+    // jthread hace join automático, pero llamarlo aquí asegura 
+    // que el objeto no termine de destruirse hasta que el hilo de escucha muera.
+    if (listener_thread_.joinable())
+    {
+        listener_thread_.request_stop(); // Señal adicional de C++20
+        listener_thread_.join();
+    }
+
+    // Aqui si puedo liberar el puntero y evitar cualquier acceso futuro a connection_.
+    connection_.reset(); // Asegura que el recurso se libere antes de que el objeto se destruya completamente
+    std::cout << "[DB] Cleanup complete. Resources released." << std::endl;
+}
+
 // Establish connection
 void DatabaseManager::connect() 
 {
