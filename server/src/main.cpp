@@ -276,8 +276,17 @@ int main(int argc, char* argv[])
         io.run();
         std::cout << "SERVER SHUTDOWN!" << std::endl;
 
-        // Clean up database connection before shutting down the server
+        // 1. Iniciamos el cierre físico de la conexión.
+        // Al resetear el puntero bajo el mutex, cualquier hilo (como el listener) 
+        // que esté bloqueado en wait_notification() recibirá inmediatamente 
+        // una excepción pqxx::broken_connection, forzando su salida.
         db.disconnect();
+
+        // 2. Sincronización y limpieza de hilos.
+        // Esperamos a que todos los hilos de fondo (jthreads) terminen su ejecución 
+        // tras haber capturado la desconexión o la señal de parada. 
+        // Esto garantiza que no queden punteros colgantes ('dangling pointers') 
+        // ni fugas de recursos al cerrar el proceso.
         db.join();
 
         // Notify threads to stop and join them
