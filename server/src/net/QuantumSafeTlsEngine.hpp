@@ -202,8 +202,28 @@ public:
      */
     void join();
 
+    /**
+     * @brief Functional interface for the core Request-Response logic.
+     * 
+     * @param input The decrypted data received from the TLS client.
+     * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
+     * 
+     * @warning **CONCURRENCY ALERT**: This processor is invoked from the Boost.Asio 
+     *          thread pool. Multiple instances of this function will run 
+     *          simultaneously across different threads for concurrent client sessions.
+     * 
+     * @warning **SHARED MEMORY**: Access to any shared resources (Global variables, 
+     *          DatabaseManager, or static members) MUST be synchronized using 
+     *          std::mutex or std::atomic to prevent race conditions and memory corruption.
+     */
     using SessionProcessor = std::function<std::vector<uint8_t>(const std::vector<uint8_t>& input)>;
 
+    /**
+     * @brief Registers the logic processor for the TLS engine.
+     * 
+     * @param proc The function or lambda that defines how the server transforms 
+     *             incoming decrypted requests into outgoing encrypted responses.
+     */
     void set_processor(SessionProcessor proc) { 
         processor_ = std::move(proc);
     }

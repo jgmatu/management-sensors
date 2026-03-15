@@ -40,9 +40,20 @@
 
 /**
  * @brief Main logic processor for decrypted TLS traffic.
- * Processes the incoming buffer and returns the data to be sent back.
+ * 
+ * @warning CONCURRENCY ALERT: This function is executed by the Boost.Asio 
+ * thread pool. Multiple instances of this function may run simultaneously 
+ * on different threads for different client sessions. 
+ * 
+ * @note SHARED RESOURCES: Any access to global variables, static members, 
+ * or shared objects (like DatabaseManager) MUST be protected by a 
+ * std::mutex or use std::atomic types to prevent race conditions.
+ *
+ * @param input The raw decrypted bytes received from the TLS client.
+ * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
  */
-std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
+std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input)
+{
     if (input.empty()) return {};
 
     // 1. Convert input to string for easy parsing/logging
@@ -74,7 +85,8 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
  * @brief Logic handler for Database NOTIFY events.
  * Processes JSON payloads from the PostgreSQL 'state_events' channel.
  */
-void on_db_event_received(boost::json::object msg) {
+void on_db_event_received(boost::json::object msg)
+{
     if (msg.empty()) return;
 
     // 1. Extract the channel for logging
