@@ -171,39 +171,6 @@ net::awaitable<void> do_listen(
 
 }  // namespace
 
-static void pretty_print(std::ostream& os, boost::json::value const& jv, std::string indent = "")
-{
-    switch (jv.kind()) {
-        case boost::json::kind::object: {
-            os << "{\n";
-            auto const& obj = jv.get_object();
-            for (auto it = obj.begin(); it != obj.end(); ++it) {
-                os << indent << "  " << boost::json::serialize(it->key()) << " : ";
-                pretty_print(os, it->value(), indent + "  ");
-                if (std::next(it) != obj.end()) os << ",";
-                os << "\n";
-            }
-            os << indent << "}";
-            break;
-        }
-        case boost::json::kind::array: {
-            os << "[\n";
-            auto const& arr = jv.get_array();
-            for (auto it = arr.begin(); it != arr.end(); ++it) {
-                os << indent << "  ";
-                pretty_print(os, *it, indent + "  ");
-                if (std::next(it) != arr.end()) os << ",";
-                os << "\n";
-            }
-            os << indent << "]";
-            break;
-        }
-        default:
-            os << boost::json::serialize(jv);
-            break;
-    }
-}
-
 int main(int argc, char* argv[])
 {
     // clang-format off
