@@ -245,6 +245,7 @@ int main(int argc, char* argv[])
         std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
 
         // BUG: Commit INSERT is causing a deadlock race condition when the listener thread is waiting on wait_notification().
+        // the deadlock occurs when the transaction add_penging_config is commited.
         g_db->listen_async("state_events", on_db_event_received);
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
