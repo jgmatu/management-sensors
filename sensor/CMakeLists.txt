@@ -23,7 +23,7 @@ add_executable(sensor src/main.cpp)
 target_include_directories(sensor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 5. Link the Paho MQTT C++ library
-# This automatically handles the underlying Paho C and OpenSSL dependencies
+# This automatically handles the underlying Paho C library and threading dependencies
 target_link_libraries(sensor 
     PRIVATE 
         PahoMqttCpp::paho-mqttpp3

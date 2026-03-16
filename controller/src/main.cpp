@@ -14,6 +14,19 @@ const std::string TOPIC { "test/topic" };
 
 int main()
 {
+    DatabaseManager db(
+        "dbname=javi "
+        "user=javi "
+        "password=12345678 "
+        "host=localhost "
+        "port=5432 "
+        "keepalives=1 "             // Activa Keep-Alive a nivel de TCP
+        "keepalives_idle=60 "       // Segundos antes de enviar el primer keepalive
+        "keepalives_interval=5 "    // Segundos entre reintentos si no hay respuesta
+        "keepalives_count=3"        // Número de fallos antes de cerrar la conexión
+    );
+    db.connect();
+
     // 1. Create the client
     mqtt::async_client cli(ADDRESS, CLIENT_ID);
 
