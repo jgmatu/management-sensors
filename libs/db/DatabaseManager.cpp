@@ -69,6 +69,51 @@ void DatabaseManager::disconnect()
     }
 }
 
+void DatabaseManager::add_pending_config(int sensor_id, 
+                                         const std::string& hostname, 
+                                         const std::string& ip, 
+                                         bool is_active)
+{
+    std::cout << "[DB] Adding pending config for Sensor ID " << sensor_id << std::endl;
+
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    if (!connection_ || !connection_->is_open()) {
+        std::cout << "[DB] Connection not available. Cannot add pending config." << std::endl;
+        throw std::runtime_error("Database connection lost.");
+    }
+
+    try
+    {
+        pqxx::work txn(*connection_);
+
+        std::cout << "[DB] Executing pending config insert for Sensor ID " << sensor_id << std::endl;
+
+        // CORRECT LIBPQXX 8.0 SYNTAX:
+        // You must explicitly wrap your arguments in pqxx::params{}
+       // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
+        txn.exec(
+            "INSERT INTO sensor_config_pending "
+            "(sensor_id, new_hostname, new_ip_address, new_is_active) "
+            "VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (sensor_id) DO UPDATE SET "
+            "new_hostname = EXCLUDED.new_hostname, "
+            "new_ip_address = EXCLUDED.new_ip_address, "
+            "new_is_active = EXCLUDED.new_is_active, "
+            "requested_at = NOW();", // Opcional: actualizar el timestamp
+            pqxx::params{sensor_id, hostname, ip, is_active}
+        );
+        std::cout << "[DB] Pending config insert executed for Sensor ID " << sensor_id << std::endl;
+        txn.commit();
+        std::cout << "[DB] Pending config queued successfully." << std::endl;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[DB-Error] " << e.what() << std::endl;
+        throw;
+    }
+}
+
 boost::json::object DatabaseManager::get_sanity_info()
 {
     boost::json::object info;

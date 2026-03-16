@@ -71,7 +71,7 @@ Handshake complete
 ```bash
 cmake -S . -B build
 make -j$(nproc) -C build
-build/server --cert certs/server.pem --key certs/server.key --port 50443 --policy policies/pqc_basic.txt
+build/server/server --cert ./server/certs/server.pem --key ./server/certs/server.key --port 50443 --policy ./server/policies/pqc_basic.txt
 ```
 
 Using the browser of you choice, visit: [https://localhost:50443](https://localhost:50443) to see it in action.

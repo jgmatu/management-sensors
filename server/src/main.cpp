@@ -18,25 +18,13 @@
 #include <thread>
 #include <vector>
 
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/use_awaitable.hpp>
-#include <boost/beast/http.hpp>
-#include <boost/program_options.hpp>
-
-#include <botan/asio_stream.h>
-#include <botan/auto_rng.h>
-#include <botan/pkcs8.h>
-#include <botan/tls_session_manager_memory.h>
-#include <botan/version.h>
-
-#include <oscp/ocsp_cache.hpp>
 #include <db/DatabaseManager.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
-
 #include <json/JsonUtils.hpp>
 
-// #define SESSION_EXPIRED_TIMEOUT
+// Global pointer to the Database Manager
+// Shared across the TLS Engine threads and the Main thread
+std::shared_ptr<DatabaseManager> g_db;
 
 struct SensorCommand {
     std::string cmd;
@@ -136,27 +124,25 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     std::cout << sc << std::endl;
 
     // 1. Validation Logic
-    if (!sc.valid || sc.cmd != "CONFIG_SENSOR") {
+    if (!sc.valid || sc.cmd != "CONFIG_SENSOR")
+    {
         response = "ERROR: Invalid Syntax. Use: CONFIG_SENSOR <id> IP <address>";
-    } 
-    else if (sc.attr != "IP") {
+    }
+    else if (sc.attr != "IP")
+    {
         response = "ERROR: Unknown attribute '" + sc.attr + "'.";
     }
-    else {
+    else
+    {
         // 2. Execution Logic
-        try {
-            /* 
-             * @note CONCURRENCY: db->execute_query() is thread-safe.
-             */
-            // std::string sql = "UPDATE sensor_config SET ip_address = " + 
-            //                  pqxx::to_quoted_string(sc.value) + 
-            //                  " WHERE sensor_id = " + std::to_string(sc.id) + ";";
-            // db->execute_query(sql);
-
+        try
+        {
             std::cout << "[PQC-Logic] Configured Sensor " << sc.id << " with IP " << sc.value << std::endl;
+            g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true);
             response = "OK: Sensor " + std::to_string(sc.id) + " updated.";
         } 
-        catch (const std::exception& e) {
+        catch (const std::exception& e)
+        {
             response = "ERROR: DB Failure - " + std::string(e.what());
         }
     }
@@ -189,16 +175,16 @@ void on_db_event_received(boost::json::object msg)
 int main(int argc, char* argv[])
 {
     // clang-format off
-   boost::program_options::options_description desc("Allowed options");
-   desc.add_options()
-      ("help", "produce help message")
-      ("port", boost::program_options::value<uint16_t>()->required(), "Port to use")
-      ("policy", boost::program_options::value<std::string>()->default_value("default"), "Botan policy file (default: Botan's default policy)")
-      ("cert", boost::program_options::value<std::string>()->required(), "Path to the server's certificate chain")
-      ("key", boost::program_options::value<std::string>()->required(), "Path to the server's certificate private key file")
-      ("ocsp-request-timeout", boost::program_options::value<uint64_t>()->default_value(10), "OCSP request timeout in seconds")
-      ("ocsp-cache-time", boost::program_options::value<uint64_t>()->default_value(6 * 60), "Cache validity time for OCSP responses in minutes")
-      ("document-root", boost::program_options::value<std::string>()->default_value("webroot"), "Path to the server's static documents folder");
+    boost::program_options::options_description desc("Allowed options");
+    desc.add_options()
+        ("help", "produce help message")
+        ("port", boost::program_options::value<uint16_t>()->required(), "Port to use")
+        ("policy", boost::program_options::value<std::string>()->default_value("default"), "Botan policy file (default: Botan's default policy)")
+        ("cert", boost::program_options::value<std::string>()->required(), "Path to the server's certificate chain")
+        ("key", boost::program_options::value<std::string>()->required(), "Path to the server's certificate private key file")
+        ("ocsp-request-timeout", boost::program_options::value<uint64_t>()->default_value(10), "OCSP request timeout in seconds")
+        ("ocsp-cache-time", boost::program_options::value<uint64_t>()->default_value(6 * 60), "Cache validity time for OCSP responses in minutes")
+        ("document-root", boost::program_options::value<std::string>()->default_value("webroot"), "Path to the server's static documents folder");
     // clang-format on
 
     boost::program_options::variables_map vm;
@@ -220,46 +206,54 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    // ... Initialize and start your QuantumSafeTlsEngine ...
     try
     {
+        // Build the connection string with TCP Keep-Alive parameters
+        std::string conn_str = 
+            "dbname=javi "
+            "user=javi "
+            "password=12345678 "
+            "host=localhost "
+            "port=5432 "
+            "keepalives=1 "          // Enable TCP Keep-Alive
+            "keepalives_idle=60 "    // 60s idle before first probe
+            "keepalives_interval=5 " // 5s between probes
+            "keepalives_count=3";    // Drop after 3 failed probes
+
+        // Initialize the global shared_ptr
+        g_db = std::make_shared<DatabaseManager>(conn_str);
+        g_db->connect();
+        std::cout << "[DB] Connection established with Keep-Alive (60s/5s/3)." << std::endl;
+
         const auto port = vm["port"].as<uint16_t>();
         const auto policy = vm["policy"].as<std::string>();
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
         const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
         const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
-
         QuantumSafeTlsEngine server(port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
+
         server.set_processor(on_tls_message_process);
 
         server.initialize();
-        {
-            // Ejemplo con Keep-Alive activo
-            DatabaseManager db(
-                "dbname=javi "
-                "user=javi "
-                "password=12345678 "
-                "host=localhost "
-                "port=5432 "
-                "keepalives=1 "             // Activa Keep-Alive a nivel de TCP
-                "keepalives_idle=60 "       // Segundos antes de enviar el primer keepalive
-                "keepalives_interval=5 "    // Segundos entre reintentos si no hay respuesta
-                "keepalives_count=3"        // Número de fallos antes de cerrar la conexión
-            );
-            db.connect();
 
-            boost::json::object sanity_info = db.get_sanity_info();
-            JsonUtils::print(std::cout, sanity_info);
-            std::cout << std::endl;
+        boost::json::object sanity_info = g_db->get_sanity_info();
+        JsonUtils::print(std::cout, sanity_info);
+        std::cout << std::endl;
 
-            std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
-            db.listen_async("state_events", on_db_event_received);
+        std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
+        g_db->listen_async("state_events", on_db_event_received);
 
-            // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
-            server.join();
-        }
+        // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
+        server.join();
         server.stop();
 
+        if (g_db)
+        {
+            std::cout << "[DB] Liberando conexión global..." << std::endl;
+            g_db.reset(); // El contador de referencias baja a 0 y se cierra la conexión
+        }
         std::cout << "[System] Thread pool joined and I/O context finalized." << std::endl;
     }
     catch (const std::exception& ex)

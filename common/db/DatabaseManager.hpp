@@ -35,6 +35,16 @@ public:
 
     void join();
 
+    /**
+     * @brief Queues a pending configuration change for a specific sensor.
+     * 
+     * @param sensor_id Unique identifier of the sensor.
+     * @param hostname New hostname to be assigned.
+     * @param ip New IP address (v4 or v6).
+     * @param is_active Desired operational state.
+     */
+    void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip, bool is_active);
+
 private:
     std::string conn_str_;
     std::jthread listener_thread_;
