@@ -154,9 +154,35 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
  * @brief Logic handler for Database NOTIFY events.
  * Processes JSON payloads from the PostgreSQL 'state_events' channel.
  */
-void on_db_event_received(boost::json::object msg)
+void on_db_config_event_received(boost::json::object msg)
 {
     if (msg.empty()) return;
+
+    std::cout << "************ COMMITED CONFIG EVENT! *************" << std::endl;
+
+    // 1. Extract the channel for logging
+    std::string_view channel = msg.at("channel").as_string();
+    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
+
+    // 2. Use your existing JsonUtils to print the payload
+    JsonUtils::print(std::cout, msg);
+    std::cout << std::endl;
+
+    // 3. Example Logic: If it's an 'alarm' type, log it specifically
+    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
+        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
+    }
+}
+
+/**
+ * @brief Logic handler for Database NOTIFY events.
+ * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ */
+void on_db_state_event_received(boost::json::object msg)
+{
+    if (msg.empty()) return;
+
+    std::cout << "************ STATE TELEMETRY EVENT! *************" << std::endl;
 
     // 1. Extract the channel for logging
     std::string_view channel = msg.at("channel").as_string();
@@ -289,7 +315,8 @@ int main(int argc, char* argv[])
          * El pipeline de sanidad y telemetría funciona ahora de forma asíncrona y 
          * paralela sin colisiones de bloqueos (locks) ni corrupción del flujo de red.
          */
-         g_db->listen_async("config_requested", on_db_event_received);
+        g_db->register_listen_async("config_event", on_db_config_event_received);
+        g_db->register_listen_async("state_events", on_db_state_event_received);
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
         server.join();

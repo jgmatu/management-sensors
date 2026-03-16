@@ -41,6 +41,7 @@ find_package(Threads REQUIRED)
 
 # 2. Define the executable and its source files
 add_executable(controller 
+    src/json/JsonUtils.cpp
     src/main.cpp
 )
 

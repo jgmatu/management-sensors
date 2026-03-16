@@ -9,11 +9,14 @@
 namespace json = boost::json;
 
 // Configuration
-const std::string ADDRESS   { "tcp://localhost:1883" };
-const std::string CLIENT_ID { "cpu_node_01" }; // Unique for each of the 100 CPUs
-const std::string TOPIC     { "test/topic" };
+const std::string ADDRESS { "tcp://localhost:1883" };
+const std::string CLIENT_ID { "pqc_sensor_node" };
+const std::string REQUEST_CONFIG_TOPIC { "config/requested" };
+const std::string EVENTS_CONFIG_TOPIC { "config/events" };
+const std::string TELEMETRY_TOPIC { "telemetry/state" };
 
-int main() {
+int main()
+{
     mqtt::async_client client(ADDRESS, CLIENT_ID);
 
     auto connOpts = mqtt::connect_options_builder()
@@ -27,27 +30,64 @@ int main() {
 
     try
     {
+        client.start_consuming();
+
         std::cout << "Connecting CPU Node: " << CLIENT_ID << "..." << std::endl;
         client.connect(connOpts)->wait();
 
+        // Subscribe to the config topic defined in your DB Trigger
+        client.subscribe(REQUEST_CONFIG_TOPIC, 1)->wait();
+
+        // 1. LAUNCH SENSOR THREAD (Background Telemetry)
+        std::jthread telemetry_thread([&client](std::stop_token st) {
+            std::default_random_engine generator;
+            std::uniform_real_distribution<double> distribution(30.0, 80.0);
+
+            std::cout << "Start telemtry producer sensor!" << std::endl;
+
+            while (!st.stop_requested())
+            {
+                double temp = distribution(generator);
+
+                json::object obj;
+                obj["sensor_id"] = 1;
+                obj["temp"] = std::round(temp * 100.0) / 100.0;
+
+                std::string payload = boost::json::serialize(obj);
+
+                // Publish to "telemetry/state"
+                client.publish(TELEMETRY_TOPIC, payload, 1, false);
+
+                // I need see multiple callbaks register 
+                std::this_thread::sleep_for(std::chrono::milliseconds(10 * 1000));
+            }
+        });
+
+        // 3. MAIN LOOP: Block and Wait for Config Requests
+        std::cout << "[Main] Subscriber active. Waiting for 'config/requested'..." << std::endl;
+
         for (;;)
         {
-            // 1. Generate Data
-            double temp = distribution(generator);
+            // This blocks the main thread until a message arrives
+            auto msg = client.consume_message();
+            if (!msg) break;
 
-            // 2. Build JSON with Boost.JSON
-            json::object obj;
-            obj["sensor_id"] = 1; // Must exist in 'sensor_config' table
-            obj["temp"]      = std::round(temp * 100.0) / 100.0; // 2 decimals
-            
-            std::string payload = json::serialize(obj);
+            try
+            {
+                auto jv = json::parse(msg->to_string());
+                std::cout << "[CONFIG] Received Update: " << json::serialize(jv) << std::endl;
 
-            // 3. Publish to Broker
-            std::cout << "Sending: " << payload << std::endl;
-            client.publish(TOPIC, payload, 1, false)->wait();
+                // Simulate config sensor process latency...
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            // 800ms interval like real sensor latency
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                std::cout << "[CONFIG] Publish commit config: " << json::serialize(jv) << std::endl;
+                std::string payload = boost::json::serialize(jv);
+
+                client.publish(EVENTS_CONFIG_TOPIC, payload, 1, false);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[JSON-Error] Malformed message: " << e.what() << std::endl;
+            }
         }
     }
     catch (const std::exception& e)

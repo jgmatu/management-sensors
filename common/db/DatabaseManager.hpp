@@ -11,8 +11,8 @@
 #include <boost/json.hpp> // For JSON handling in get_sanity_info()
 
 class DatabaseManager {
-public:
 
+public:
     DatabaseManager(const std::string& connection_str);
 
     virtual ~DatabaseManager();
@@ -31,7 +31,7 @@ public:
 
     void parser_notify(const pqxx::notification& n, boost::json::object& msg);
 
-    void listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
+    void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
 
     void join();
 
@@ -45,10 +45,37 @@ public:
      */
     void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip, bool is_active);
 
+    /**
+     * @brief Performs an atomic UPSERT of the sensor's real-time telemetry data.
+     * 
+     * This method synchronizes the incoming MQTT telemetry with the PostgreSQL 
+     * 'sensor_state' table. If the sensor_id exists, it updates the 'current_temp' 
+     * and refreshes the 'last_update' timestamp. If the sensor_id is new, it 
+     * creates a new state record.
+     * 
+     * @param sensor_id Unique identifier of the sensor (Foreign Key to sensor_config).
+     * @param temp The current temperature value in Celsius.
+     * 
+     * @note **Thread-Safety**: Uses the internal DML-specific mutex to prevent 
+     *       contention with concurrent TLS-driven configuration writes.
+     * @note **Triggers**: Successful completion of this transaction fires the 
+     *       PostgreSQL 'state_events' trigger for real-time notification.
+     */
+    void upsert_sensor_state(int sensor_id, double temp);
+
 private:
+
+    void run_listener_loop();
+
     std::string conn_str_;
-    std::jthread listener_thread_;
-    std::function<void(boost::json::object)> notification_callback_;
+    std::unique_ptr<std::jthread> listener_thread_;
+
+    /**
+     * @brief Map to store callbacks per channel.
+     * Key: Channel name (e.g., "config_events")
+     * Value: Function to process the JSON payload.
+     */
+    std::unordered_map<std::string, std::function<void(boost::json::object)>> callbacks_;
 
     // Protege el ciclo de vida de connection_.
     // Dado que cualquier clase externa puede invocar disconnect(), 

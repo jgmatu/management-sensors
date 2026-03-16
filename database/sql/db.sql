@@ -166,7 +166,7 @@ BEGIN
     END IF;
 
     PERFORM pg_notify('config_events', payload::text);
-    RETURN NULL; -- En AFTER triggers el retorno da igual, pero mejor ser explícitos
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -179,7 +179,7 @@ BEGIN
         'ts', NEW.last_update
         )::text
     );
-    RETURN NEW;
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 

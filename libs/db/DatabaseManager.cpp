@@ -3,7 +3,7 @@
 #include <sys/epoll.h>
 
 DatabaseManager::DatabaseManager(const std::string& connection_listener_str) 
-        : conn_str_(connection_listener_str) {}
+        : conn_str_(connection_listener_str), listener_thread_(nullptr) {}
 
 DatabaseManager::~DatabaseManager()
 {
@@ -17,10 +17,10 @@ DatabaseManager::~DatabaseManager()
     // 2. Sincronizar hilos
     // jthread hace join automático, pero llamarlo aquí asegura 
     // que el objeto no termine de destruirse hasta que el hilo de escucha muera.
-    if (listener_thread_.joinable())
+    if (listener_thread_->joinable())
     {
-        listener_thread_.request_stop(); // Señal adicional de C++20
-        listener_thread_.join();
+        listener_thread_->request_stop(); // Señal adicional de C++20
+        listener_thread_->join();
     }
 
     // Aqui si puedo liberar el puntero y evitar cualquier acceso futuro a connection_listener_.
@@ -78,6 +78,41 @@ void DatabaseManager::disconnect()
     catch (const std::exception& e) 
     {
         std::cerr << "Error during disconnect: " << e.what() << std::endl;
+    }
+}
+
+void DatabaseManager::upsert_sensor_state(int sensor_id, double temp)
+{
+    // 1. Thread safety: Use the DML-specific mutex
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    if (!connection_queries_ || !connection_queries_->is_open()) {
+        throw std::runtime_error("DML Connection not available for telemetry.");
+    }
+
+    try
+    {
+        pqxx::work txn(*connection_queries_);
+
+        // 2. UPSERT Logic: 
+        // If the sensor_id exists, UPDATE the temperature and timestamp.
+        // If it doesn't exist, INSERT a new row.
+        txn.exec(
+            "INSERT INTO sensor_state (sensor_id, current_temp) "
+            "VALUES ($1, $2) "
+            "ON CONFLICT (sensor_id) DO UPDATE SET "
+            "current_temp = EXCLUDED.current_temp, "
+            "last_update = NOW();",
+            pqxx::params{sensor_id, temp}
+        );
+
+        txn.commit();
+        // Trace for debugging
+        // std::cout << "[DB] Telemetry updated for Sensor " << sensor_id << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "[DB-Error] Telemetry Upsert Failed: " << e.what() << std::endl;
+        throw;
     }
 }
 
@@ -182,46 +217,76 @@ void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::ob
     }
 }
 
-void DatabaseManager::listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) 
+void DatabaseManager::register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) 
 {
-    // Assign the thread to the member variable
-    listener_thread_ = std::jthread([this, channel, callback](std::stop_token st) 
+    try 
     {
+        // 1. Setup the LISTEN command
+        {
+            std::lock_guard<std::mutex> lock(conn_mutex_);
+
+            if (!connection_listener_ || !connection_listener_->is_open()) {
+                throw std::runtime_error("Database connection is not established.");
+            }
+
+            pqxx::nontransaction nt(*connection_listener_);
+            // Use quote_name to avoid syntax errors with channel names
+            nt.exec("LISTEN " + nt.quote_name(channel));
+
+            // nt is destroyed here when the scope ends, 
+            // ensuring no transaction is active for the next step.
+            nt.commit();
+
+            // 1. Register the high-level handler in our map
+            callbacks_[channel] = std::move(callback);
+
+            // 2. Use the dedicated listener connection to register the low-level SQL LISTEN
+            // The lambda here acts as the "bridge" between raw pqxx and your JSON logic
+            connection_listener_->listen(channel, [channel, this](const pqxx::notification& n) {
+                std::function<void(boost::json::object)> handler;
+
+                std::cout << "Channel!" << channel << std::endl;
+                if (callbacks_.contains(channel))
+                {
+                    handler = callbacks_[channel];
+                }
+
+                // Process and dispatch
+                if (handler)
+                {
+                    boost::json::object msg;
+                    parser_notify(n, msg); // Your custom parser
+                    handler(std::move(msg));
+                }
+            });
+            if (!listener_thread_) run_listener_loop();
+        }
+    }
+    catch (const pqxx::broken_connection& e) {
+        /*  
+            * EXPECTED DISCONNECTION SIGNAL:
+            * This occurs when disconnect() is called or the DB server drops the socket.
+            * We treat this as a signal to finalize the thread gracefully.
+            */
+        std::cerr << "[DB-Listener] Connection closed or lost: " << e.what() << std::endl;
+    }
+    catch (const std::exception& e) {
+        /* 
+            * UNEXPECTED CRITICAL ERROR:
+            * Handle other logic errors (JSON parsing, bad SQL, etc.)
+            */
+        std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
+    }
+}
+
+void DatabaseManager::run_listener_loop()
+{
+    listener_thread_ = std::make_unique<std::jthread>([this](std::stop_token st) {
         try 
         {
-            // 1. Setup the LISTEN command
-            {
-                std::lock_guard<std::mutex> lock(conn_mutex_);
-                if (!connection_listener_ || !connection_listener_->is_open()) {
-                    throw std::runtime_error("Database connection is not established.");
-                }
-
-                pqxx::nontransaction nt(*connection_listener_);
-                // Use quote_name to avoid syntax errors with channel names
-                nt.exec("LISTEN " + nt.quote_name(channel));
-
-                // nt is destroyed here when the scope ends, 
-                // ensuring no transaction is active for the next step.
-                nt.commit();
-            }
-
-            // 2. Register the handler (after nt is gone)
-            {
-                std::lock_guard<std::mutex> lock(conn_mutex_);
-                if (!connection_listener_ || !connection_listener_->is_open()) {
-                    throw std::runtime_error("Database connection is not established.");
-                }
-
-                connection_listener_->listen(channel, [this, callback](pqxx::notification n) {
-                    boost::json::object msg;
-                    parser_notify(n, msg);
-                    callback(msg);
-                });
-            }
-
             for (;;)
             {
-               // Data available: let libpqxx process it
+                // Data available: let libpqxx process it
                 // If the connection is broken, this will throw pqxx::broken_connection
                 std::cout << "Waiting for notification..." << std::endl;
                 /*
@@ -235,7 +300,6 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                 */
                 connection_listener_->wait_notification(); // Timeout of 1 second to allow periodic stop checks
             }
-            std::cout << "Listener thread stopping gracefully." << std::endl;
         }
         catch (const pqxx::broken_connection& e) {
             /*  
@@ -252,13 +316,12 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
              */
             std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
         }
-        std::cout << "Listener database thread exiting." << std::endl;
     });
 }
 
 void DatabaseManager::join()
 {
-    if (listener_thread_.joinable()) {
-        listener_thread_.join();
+    if (listener_thread_->joinable()) {
+        listener_thread_->join();
     }
 }
