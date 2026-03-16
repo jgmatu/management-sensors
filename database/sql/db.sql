@@ -108,27 +108,40 @@ CREATE TABLE sensor_config (
     hostname       VARCHAR(100) NOT NULL,
     ip_address     INET NOT NULL,
     is_active      BOOLEAN DEFAULT TRUE,
-    cert_id        INT REFERENCES sensor_certs(cert_id) ON DELETE SET NULL
+    cert_id        INT REFERENCES sensor_certs(cert_id) ON DELETE SET NULL,
+    request_id     BIGINT
 );
 
--- 2.3. TABLA DE ESTADO (Telemetría Efímera)
-CREATE TABLE sensor_state (
-    sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
-    current_temp   NUMERIC(5, 2),
-    last_update    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3.1. TABLA DE CONFIGURACIÓN PENDIENTE (Órdenes de Cambio)
+-- 2.3. TABLA DE CONFIGURACIÓN PENDIENTE (Órdenes de Cambio)
 -- El Servidor INSERT/UPDATE aquí. El Controlador la VACÍA tras éxito.
 CREATE TABLE sensor_config_pending (
     sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
     new_hostname   VARCHAR(100),
     new_ip_address INET,
     new_is_active  BOOLEAN,
-    requested_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    request_id     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3.2. TABLA DE ERRORES (Persistencia de fallos)
+-- 2.5. TABLA DE ERRORES (Persistencia de fallos)
+-- Si el controlador falla, lo registra aquí. 
+-- El Servidor puede limpiar esta tabla cuando el usuario "reintenta" o "descarta" el error.
+CREATE TABLE sensor_config_errors (
+    error_id       SERIAL PRIMARY KEY,
+    sensor_id      INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
+    error_code     VARCHAR(50), 
+    error_detail   TEXT,
+    failed_config  JSONB, -- Guardamos aquí lo que se intentó para no perder el dato al borrar la pendiente
+    request_id     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2.4. TABLA DE ESTADO (Telemetría Efímera)
+CREATE TABLE sensor_state (
+    sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
+    current_temp   NUMERIC(5, 2),
+    last_update    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2.5. TABLA DE ERRORES (Persistencia de fallos)
 -- Si el controlador falla, lo registra aquí. 
 -- El Servidor puede limpiar esta tabla cuando el usuario "reintenta" o "descarta" el error.
 CREATE TABLE sensor_config_errors (

@@ -67,10 +67,10 @@ public:
         RequestContext ctx;
         std::unique_lock<std::mutex> lock(map_mtx);
         if (pending_requests.size() >= MAX_PENDING) return ResponseStatus::SYSTEM_FULL;
-        
+
         pending_requests[id] = &ctx;
         bool triggered = ctx.cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&] { return ctx.ready; });
-        
+
         ResponseStatus final_status = triggered ? ctx.status : ResponseStatus::TIMEOUT;
         pending_requests.erase(id); // Erase bajo el mismo lock del wait
         return final_status;
@@ -80,7 +80,9 @@ public:
     {
         std::lock_guard<std::mutex> lock(map_mtx);
         auto it = pending_requests.find(id);
-        if (it != pending_requests.end()) {
+
+        if (it != pending_requests.end())
+        {
             it->second->status = status;
             it->second->ready = true;
             it->second->cv.notify_one();
@@ -88,18 +90,35 @@ public:
     }
 };
 
-// Function for N waiter threads
-void waiter_thread(Dispatcher& dispatcher, int thread_idx, uint64_t id) {
-    std::cout << "[Waiter " << thread_idx << "] Waiting for ID: " << id << "...\n";
-    
-    // Wait for up to 2 seconds
-    ResponseStatus result = dispatcher.wait_for_response(id, 2000);
+std::mutex out_mtx;
 
-    if (result == ResponseStatus::SUCCESS) {
-        std::cout << "[Waiter " << thread_idx << "] SUCCESS for ID: " << id << "\n";
-    } else {
-        std::cout << "[Waiter " << thread_idx << "] TIMEOUT/OTHER for ID: " << id 
-                  << " (Status: " << (int)result << ")\n";
+// Function for N waiter threads
+void waiter_thread(Dispatcher& dispatcher, int thread_idx, uint64_t id)
+{
+    for (;;)
+    {
+        {
+            std::unique_lock<std::mutex> lock(out_mtx);
+            std::cout << "[Waiter " << thread_idx << "] Waiting for ID: " << id << "...\n";
+        }
+
+        // Wait for up to 2 seconds
+        ResponseStatus result = dispatcher.wait_for_response(id, 4000);
+
+        {
+            std::unique_lock<std::mutex> lock(out_mtx);
+
+            if (result == ResponseStatus::SUCCESS)
+            {
+                std::cout << "[Waiter " << thread_idx << "] SUCCESS for ID: " << id << "\n";
+                // Invalid test of dispatcher even id are not dispatcher it is time out behaivour.
+                if (id % 2 == 0) throw;
+            }
+            else
+            {
+                std::cout << "[Waiter " << thread_idx << "] TIMEOUT/OTHER for ID: " << id  << " (Status: " << (int)result << ")\n";
+            }
+        }
     }
 }
 
@@ -111,7 +130,7 @@ int main()
     std::vector<uint64_t> ids;
 
     // 1. Create N waiter threads
-    for (int i = 0; i < N; ++i)
+    for (int i = 1; i <= N; ++i)
     {
         uint64_t id = dispatcher.generate_id();
         ids.push_back(id);
@@ -119,18 +138,22 @@ int main()
     }
 
     // Small delay to ensure all threads are in wait_for_response
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2 * 1000));
 
     // 2. Main thread dispatches ONLY even threads (1:N mode)
-    std::cout << "[Main] Starting selective dispatch...\n";
-    for (int i = 0; i < N; ++i)
+    for (;;)
     {
-        if (i % 2 == 0)
+        for (int i = 0; i < N; ++i)
         {
-            std::cout << "[Main] Dispatching SUCCESS to ID: " << ids[i] << "\n";
-            dispatcher.dispatch(ids[i], ResponseStatus::SUCCESS);
+            if (i % 2 == 0)
+            {
+                std::cout << "[Main] Dispatching SUCCESS to ID: " << ids[i] << "\n";
+                dispatcher.dispatch(ids[i], ResponseStatus::SUCCESS);
+            }
+            // Odd IDs are never dispatched, so they will eventually timeout
         }
-        // Odd IDs are never dispatched, so they will eventually timeout
+        std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        std::cout << "[Main] Starting selective dispatch...\n";
     }
 
     // 3. Join all threads
