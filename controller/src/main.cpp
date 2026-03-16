@@ -131,6 +131,7 @@ int main()
                             auto obj = jv.as_object();
 
                             std::cout << "********* TOPIC ******** : " << topic << std::endl;
+
                             // --- SWITCH LOGIC BASED ON TOPIC ---
                             if (topic == TELEMETRY_TOPIC)
                             {

@@ -315,7 +315,7 @@ int main(int argc, char* argv[])
          * El pipeline de sanidad y telemetría funciona ahora de forma asíncrona y 
          * paralela sin colisiones de bloqueos (locks) ni corrupción del flujo de red.
          */
-        g_db->register_listen_async("config_event", on_db_config_event_received);
+        g_db->register_listen_async("config_events", on_db_config_event_received);
         g_db->register_listen_async("state_events", on_db_state_event_received);
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
