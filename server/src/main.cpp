@@ -110,8 +110,9 @@ std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
  * To receive the final configuration response, a message queue must be 
  * implemented to hold the thread until the final configuration resolution 
  * is achieved. The callback will remain in a blocking state, waiting 
- * for a message to arrive in the queue containing the final response 
- * from the sensor or controller.
+ * for a message to arrive in the queue containing the final response. 
+ * This final response will be received through the Database Listener, 
+ * triggered by the Controller Process once the sensor update is finalized.
  *
  * @param input The raw decrypted bytes received from the TLS client.
  * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
