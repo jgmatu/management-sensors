@@ -2,8 +2,8 @@
 #include <libpq-fe.h> // Raw libpq header
 #include <sys/epoll.h>
 
-DatabaseManager::DatabaseManager(const std::string& connection_str) 
-        : conn_str_(connection_str) {}
+DatabaseManager::DatabaseManager(const std::string& connection_listener_str) 
+        : conn_str_(connection_listener_str) {}
 
 DatabaseManager::~DatabaseManager()
 {
@@ -23,22 +23,27 @@ DatabaseManager::~DatabaseManager()
         listener_thread_.join();
     }
 
-    // Aqui si puedo liberar el puntero y evitar cualquier acceso futuro a connection_.
-    connection_.reset();
+    // Aqui si puedo liberar el puntero y evitar cualquier acceso futuro a connection_listener_.
+    connection_listener_.reset();
+    connection_queries_.reset();
     std::cout << "[DB] Cleanup complete. Resources released." << std::endl;
 }
 
 // Establish connection
 void DatabaseManager::connect()
 {
-    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_.
+    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_listener_.
     std::lock_guard<std::mutex> lock(conn_mutex_); 
 
     try
     {
-        connection_ = std::make_unique<pqxx::connection>(conn_str_);
-        if (connection_->is_open()) {
-            std::cout << "Connected to: " << connection_->dbname() << std::endl;
+        connection_listener_ = std::make_unique<pqxx::connection>(conn_str_);
+        if (connection_listener_->is_open()) {
+            std::cout << "Connected to: " << connection_listener_->dbname() << std::endl;
+        }
+        connection_queries_ = std::make_unique<pqxx::connection>(conn_str_);
+        if (connection_queries_->is_open()) {
+            std::cout << "Connected to: " << connection_queries_->dbname() << std::endl;
         }
     }
     catch (const std::exception& e)
@@ -50,17 +55,24 @@ void DatabaseManager::connect()
 
 void DatabaseManager::disconnect() 
 {
-    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_.
+    // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_listener_.
     std::lock_guard<std::mutex> lock(conn_mutex_); 
 
     try 
     {
-        if (connection_ && connection_->is_open()) 
+        if (connection_listener_ && connection_listener_->is_open()) 
         {
             // Opcional: Notificar el cierre
-            std::cout << "Disconnecting from: " << connection_->dbname() << std::endl;
+            std::cout << "Disconnecting from: " << connection_listener_->dbname() << std::endl;
             
-            connection_->close(); // Cierra la conexión física
+            connection_listener_->close(); // Cierra la conexión física
+        }
+        if (connection_queries_ && connection_queries_->is_open()) 
+        {
+            // Opcional: Notificar el cierre
+            std::cout << "Disconnecting from: " << connection_queries_->dbname() << std::endl;
+            
+            connection_queries_->close(); // Cierra la conexión física
         }
     }
     catch (const std::exception& e) 
@@ -78,20 +90,31 @@ void DatabaseManager::add_pending_config(int sensor_id,
 
     std::cout << "[DB] Adding pending config for Sensor ID " << sensor_id << std::endl;
 
-    if (!connection_ || !connection_->is_open()) {
+    if (!connection_queries_ || !connection_queries_->is_open()) {
         std::cout << "[DB] Connection not available. Cannot add pending config." << std::endl;
         throw std::runtime_error("Database connection lost.");
     }
 
     try
     {
-        pqxx::work txn(*connection_);
+        pqxx::work txn(*connection_queries_);
 
         std::cout << "[DB] Executing pending config insert for Sensor ID " << sensor_id << std::endl;
 
         // Force the DB to give up if it can't get a lock in 3 seconds
         // This prevents the TLS session from hanging indefinitely
         txn.exec("SET LOCAL lock_timeout = '3s';");
+
+        // --- START TRACE ---
+        std::cout << "\n[SQL-TRACE] ==========================================" << std::endl;
+        std::cout << "QUERY: INSERT INTO sensor_config_pending (sensor_id, new_hostname, new_ip_address, new_is_active)" << std::endl;
+        std::cout << "       VALUES ($1, $2, $3, $4) ON CONFLICT (sensor_id) DO UPDATE SET..." << std::endl;
+        std::cout << "VALUES: $1=" << sensor_id 
+                << ", $2='" << hostname 
+                << "', $3='" << ip 
+                << "', $4=" << (is_active ? "TRUE" : "FALSE") << std::endl;
+        std::cout << "[SQL-TRACE] ==========================================\n" << std::endl;
+        // --- END TRACE ---
 
         // CORRECT LIBPQXX 8.0 SYNTAX:
         // You must explicitly wrap your arguments in pqxx::params{}
@@ -114,7 +137,7 @@ void DatabaseManager::add_pending_config(int sensor_id,
     catch (const pqxx::broken_connection& e)
     {
         std::cerr << "[DB] FATAL: Connection lost (Server terminated session). " << e.what() << std::endl;
-        // Do NOT try to call connection_->... here.
+        // Do NOT try to call connection_listener_->... here.
         // Reset your local flags so the jthread exits cleanly.
     }
     catch (const std::exception& e)
@@ -128,10 +151,10 @@ boost::json::object DatabaseManager::get_sanity_info()
 {
     boost::json::object info;
     
-    // Acquire lock to ensure connection_ isn't being reset by another thread
+    // Acquire lock to ensure connection_listener_ isn't being reset by another thread
     std::lock_guard<std::mutex> lock(conn_mutex_);
     
-    if (!connection_ || !connection_->is_open()) {
+    if (!connection_queries_ || !connection_queries_->is_open()) {
         info["error"] = "Database connection not available";
         return info;
     }
@@ -139,7 +162,7 @@ boost::json::object DatabaseManager::get_sanity_info()
     try
     {
         // Use a nontransaction for read-only sanity checks
-        pqxx::nontransaction ntxn(*connection_);
+        pqxx::nontransaction ntxn(*connection_queries_);
 
         // 1. Get PostgreSQL Server Version
         pqxx::row pg_ver = ntxn.exec("SELECT version();").one_row();
@@ -150,7 +173,7 @@ boost::json::object DatabaseManager::get_sanity_info()
         info["db_uptime"] = uptime[0].c_str();
 
         // 3. Current connection backend PID
-        info["backend_pid"] = connection_->backendpid();
+        info["backend_pid"] = connection_queries_->backendpid();
 
         // 4. pqxx Library Info
         info["pqxx_version"] = PQXX_VERSION;
@@ -190,11 +213,11 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             // 1. Setup the LISTEN command
             {
                 std::lock_guard<std::mutex> lock(conn_mutex_);
-                if (!connection_ || !connection_->is_open()) {
+                if (!connection_listener_ || !connection_listener_->is_open()) {
                     throw std::runtime_error("Database connection is not established.");
                 }
 
-                pqxx::nontransaction nt(*connection_);
+                pqxx::nontransaction nt(*connection_listener_);
                 // Use quote_name to avoid syntax errors with channel names
                 nt.exec("LISTEN " + nt.quote_name(channel));
 
@@ -206,11 +229,11 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
             // 2. Register the handler (after nt is gone)
             {
                 std::lock_guard<std::mutex> lock(conn_mutex_);
-                if (!connection_ || !connection_->is_open()) {
+                if (!connection_listener_ || !connection_listener_->is_open()) {
                     throw std::runtime_error("Database connection is not established.");
                 }
 
-                connection_->listen(channel, [this, callback](pqxx::notification n) {
+                connection_listener_->listen(channel, [this, callback](pqxx::notification n) {
                     boost::json::object msg;
                     parser_notify(n, msg);
                     callback(msg);
@@ -231,7 +254,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                     * connection is lost. If the connection is lost, it will throw an exception which we catch
                     * to handle reconnection logic if needed.
                 */
-                connection_->wait_notification(); // Timeout of 1 second to allow periodic stop checks
+                connection_listener_->wait_notification(); // Timeout of 1 second to allow periodic stop checks
             }
             std::cout << "Listener thread stopping gracefully." << std::endl;
         }

@@ -19,6 +19,12 @@ while true; do
                WHERE sensor_id = $ID;"
 
         psql -d "$DB_NAME" -c "$QUERY" > /dev/null 2>&1
+
+        BUG_QUERY="INSERT INTO sensor_config_pending (sensor_id, new_hostname, new_ip_address, new_is_active)
+                VALUES ($1, $2, $3, $4) ON CONFLICT (sensor_id) DO UPDATE SET...
+            VALUES: $1=1, $2='sensor-1', $3='1.1.1.1', $4=TRUE;"
+
+        psql -d "$DB_NAME" -c "$BUG_QUERY" > /dev/null 2>&1
     done
 
     echo "Sent: Update telemetry for sensors at $(date +%T)"

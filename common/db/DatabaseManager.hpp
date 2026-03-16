@@ -54,6 +54,7 @@ private:
     // Dado que cualquier clase externa puede invocar disconnect(), 
     // todas las operaciones internas (especialmente las asíncronas) 
     // DEBEN adquirir este mutex antes de desreferenciar el puntero.
-    std::unique_ptr<pqxx::connection> connection_;
+    std::unique_ptr<pqxx::connection> connection_queries_;
+    std::unique_ptr<pqxx::connection> connection_listener_;
     mutable std::mutex conn_mutex_; 
 };
