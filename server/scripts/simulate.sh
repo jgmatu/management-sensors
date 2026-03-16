@@ -2,7 +2,7 @@
 
 # Configuración
 DB_NAME="javi"
-INTERVALO_SEGUNDOS=2
+INTERVALO_SEGUNDOS=0.02
 BASE_TEMP=20
 RANGO=10  # Variación total de 10 grados
 
