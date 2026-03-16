@@ -170,39 +170,43 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION notify_state_change() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION notify_state_change()
+RETURNS TRIGGER AS $$
 BEGIN
     PERFORM pg_notify('state_events', json_build_object(
-        'sensor_id', NEW.sensor_id, 'temp', NEW.current_temp, 'ts', NEW.last_update
-    )::text);
+        'sensor_id', NEW.sensor_id,
+        'temp', NEW.current_temp,
+        'ts', NEW.last_update
+        )::text
+    );
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 -- 5. LÓGICA REACTIVA PARA SEGURIDAD (Canal: cert_events)
-CREATE OR REPLACE FUNCTION notify_cert_change() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION notify_cert_change()
+RETURNS TRIGGER AS $$
 BEGIN
     PERFORM pg_notify('cert_events', json_build_object(
-        'action', TG_OP,
-        'cert_id', COALESCE(NEW.cert_id, OLD.cert_id),
-        'revoked', COALESCE(NEW.is_revoked, FALSE),
-        'cn', COALESCE(NEW.common_name, OLD.common_name)
-    )::text);
+            'action', TG_OP,
+            'cert_id', COALESCE(NEW.cert_id, OLD.cert_id),
+            'revoked', COALESCE(NEW.is_revoked, FALSE),
+            'cn', COALESCE(NEW.common_name, OLD.common_name)
+        )::text
+    );
     RETURN NULL;
 END; $$ LANGUAGE plpgsql;
 
 -- Función para notificar nueva configuración pendiente
-CREATE OR REPLACE FUNCTION notify_config_request() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION notify_config_request()
+RETURNS TRIGGER AS $$
 BEGIN
-    -- Enviamos el ID del sensor y el payload en formato JSON
-    PERFORM pg_notify(
-        'config_requested', 
-        json_build_object(
+    PERFORM pg_notify('config_requested', json_build_object(
             'sensor_id', NEW.sensor_id,
-            'hostname', NEW.new_hostname,
+            'hostname',  NEW.new_hostname,
             'ip_address', NEW.new_ip_address,
             'is_active', NEW.new_is_active,
-            'action', 'UPDATE_CONFIG'
+            'action',    TG_OP -- Returns 'INSERT' or 'UPDATE'
         )::text
     );
     RETURN NEW;
@@ -210,11 +214,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Función para notificar errores de configuración
-CREATE OR REPLACE FUNCTION notify_config_error() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION notify_config_error()
+RETURNS TRIGGER AS $$
 BEGIN
-    PERFORM pg_notify(
-        'config_errors', 
-        json_build_object(
+    PERFORM pg_notify('config_errors', json_build_object(
             'sensor_id', NEW.sensor_id,
             'error_code', NEW.error_code,
             'detail', NEW.error_detail,
@@ -244,7 +247,7 @@ FOR EACH ROW EXECUTE FUNCTION notify_config_request();
 
 -- Trigger asociado a la tabla de errores
 CREATE TRIGGER trg_notify_config_error
-AFTER INSERT ON sensor_config_errors
+AFTER INSERT OR UPDATE OR DELETE ON sensor_config_errors
 FOR EACH ROW EXECUTE FUNCTION notify_config_error();
 
 -- Notifica cambios en la Telemetría
