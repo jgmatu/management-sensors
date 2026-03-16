@@ -74,9 +74,9 @@ void DatabaseManager::add_pending_config(int sensor_id,
                                          const std::string& ip, 
                                          bool is_active)
 {
-    std::cout << "[DB] Adding pending config for Sensor ID " << sensor_id << std::endl;
-
     std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    std::cout << "[DB] Adding pending config for Sensor ID " << sensor_id << std::endl;
 
     if (!connection_ || !connection_->is_open()) {
         std::cout << "[DB] Connection not available. Cannot add pending config." << std::endl;
@@ -89,9 +89,13 @@ void DatabaseManager::add_pending_config(int sensor_id,
 
         std::cout << "[DB] Executing pending config insert for Sensor ID " << sensor_id << std::endl;
 
+        // Force the DB to give up if it can't get a lock in 3 seconds
+        // This prevents the TLS session from hanging indefinitely
+        txn.exec("SET LOCAL lock_timeout = '3s';");
+
         // CORRECT LIBPQXX 8.0 SYNTAX:
         // You must explicitly wrap your arguments in pqxx::params{}
-       // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
+        // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
         txn.exec(
             "INSERT INTO sensor_config_pending "
             "(sensor_id, new_hostname, new_ip_address, new_is_active) "
@@ -106,6 +110,12 @@ void DatabaseManager::add_pending_config(int sensor_id,
         std::cout << "[DB] Pending config insert executed for Sensor ID " << sensor_id << std::endl;
         txn.commit();
         std::cout << "[DB] Pending config queued successfully." << std::endl;
+    }
+    catch (const pqxx::broken_connection& e)
+    {
+        std::cerr << "[DB] FATAL: Connection lost (Server terminated session). " << e.what() << std::endl;
+        // Do NOT try to call connection_->... here.
+        // Reset your local flags so the jthread exits cleanly.
     }
     catch (const std::exception& e)
     {
@@ -186,10 +196,11 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
 
                 pqxx::nontransaction nt(*connection_);
                 // Use quote_name to avoid syntax errors with channel names
-                nt.exec("LISTEN " + channel + ";");
+                nt.exec("LISTEN " + nt.quote_name(channel));
 
                 // nt is destroyed here when the scope ends, 
                 // ensuring no transaction is active for the next step.
+                nt.commit();
             }
 
             // 2. Register the handler (after nt is gone)
@@ -220,7 +231,7 @@ void DatabaseManager::listen_async(const std::string& channel, std::function<voi
                     * connection is lost. If the connection is lost, it will throw an exception which we catch
                     * to handle reconnection logic if needed.
                 */
-                connection_->wait_notification();
+                connection_->wait_notification(); // Timeout of 1 second to allow periodic stop checks
             }
             std::cout << "Listener thread stopping gracefully." << std::endl;
         }

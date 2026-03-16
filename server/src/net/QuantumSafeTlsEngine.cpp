@@ -22,7 +22,7 @@ QuantumSafeTlsEngine::QuantumSafeTlsEngine(uint16_t port,  const std::string& ce
 
     // Inicialización del atributo de clase con el hint de hilos
     const auto num_threads = std::thread::hardware_concurrency();
-    io_context_ = std::make_unique<boost::asio::io_context>(static_cast<int>(num_threads + 1));
+    io_context_ = std::make_unique<boost::asio::io_context>(static_cast<int>(num_threads));
 }
 
 void QuantumSafeTlsEngine::initialize()
