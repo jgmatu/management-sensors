@@ -27,6 +27,8 @@ int main()
     );
     db.connect();
 
+    db.listen_async('config_request')
+
     // 1. Create the client
     mqtt::async_client cli(ADDRESS, CLIENT_ID);
 

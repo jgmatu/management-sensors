@@ -88,8 +88,6 @@ void DatabaseManager::add_pending_config(int sensor_id,
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
-    std::cout << "[DB] Adding pending config for Sensor ID " << sensor_id << std::endl;
-
     if (!connection_queries_ || !connection_queries_->is_open()) {
         std::cout << "[DB] Connection not available. Cannot add pending config." << std::endl;
         throw std::runtime_error("Database connection lost.");
@@ -99,40 +97,21 @@ void DatabaseManager::add_pending_config(int sensor_id,
     {
         pqxx::work txn(*connection_queries_);
 
-        std::cout << "[DB] Executing pending config insert for Sensor ID " << sensor_id << std::endl;
-
-        // Force the DB to give up if it can't get a lock in 3 seconds
-        // This prevents the TLS session from hanging indefinitely
-        txn.exec("SET LOCAL lock_timeout = '3s';");
-
-        // --- START TRACE ---
-        std::cout << "\n[SQL-TRACE] ==========================================" << std::endl;
-        std::cout << "QUERY: INSERT INTO sensor_config_pending (sensor_id, new_hostname, new_ip_address, new_is_active)" << std::endl;
-        std::cout << "       VALUES ($1, $2, $3, $4) ON CONFLICT (sensor_id) DO UPDATE SET..." << std::endl;
-        std::cout << "VALUES: $1=" << sensor_id 
-                << ", $2='" << hostname 
-                << "', $3='" << ip 
-                << "', $4=" << (is_active ? "TRUE" : "FALSE") << std::endl;
-        std::cout << "[SQL-TRACE] ==========================================\n" << std::endl;
-        // --- END TRACE ---
-
         // CORRECT LIBPQXX 8.0 SYNTAX:
         // You must explicitly wrap your arguments in pqxx::params{}
         // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
         txn.exec(
             "INSERT INTO sensor_config_pending "
-            "(sensor_id, new_hostname, new_ip_address, new_is_active) "
-            "VALUES ($1, $2, $3, $4) "
-            "ON CONFLICT (sensor_id) DO UPDATE SET "
-            "new_hostname = EXCLUDED.new_hostname, "
-            "new_ip_address = EXCLUDED.new_ip_address, "
-            "new_is_active = EXCLUDED.new_is_active, "
-            "requested_at = NOW();", // Opcional: actualizar el timestamp
+                "(sensor_id, new_hostname, new_ip_address, new_is_active) "
+                "VALUES ($1, $2, $3, $4) "
+                "ON CONFLICT (sensor_id) DO UPDATE SET "
+                "new_hostname = EXCLUDED.new_hostname, "
+                "new_ip_address = EXCLUDED.new_ip_address, "
+                "new_is_active = EXCLUDED.new_is_active, "
+                "requested_at = NOW();", // Opcional: actualizar el timestamp
             pqxx::params{sensor_id, hostname, ip, is_active}
         );
-        std::cout << "[DB] Pending config insert executed for Sensor ID " << sensor_id << std::endl;
         txn.commit();
-        std::cout << "[DB] Pending config queued successfully." << std::endl;
     }
     catch (const pqxx::broken_connection& e)
     {
