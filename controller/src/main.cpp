@@ -121,8 +121,8 @@ int main()
                 {
                     if (g_mqtt_client && g_mqtt_client->is_connected())
                     {
-                        auto msg = g_mqtt_client->consume_message(); 
-                        
+                        auto msg = g_mqtt_client->consume_message();
+
                         if (msg)
                         {
                             std::string topic = msg->get_topic();

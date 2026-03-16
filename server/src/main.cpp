@@ -106,13 +106,15 @@ std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
  * or shared objects (like DatabaseManager) MUST be protected by a 
  * std::mutex or use std::atomic types to prevent race conditions.
  *
+ * @section Synchronicity & Response Handling:
+ * To receive the final configuration response, a message queue must be 
+ * implemented to hold the thread until the final configuration resolution 
+ * is achieved. The callback will remain in a blocking state, waiting 
+ * for a message to arrive in the queue containing the final response 
+ * from the sensor or controller.
+ *
  * @param input The raw decrypted bytes received from the TLS client.
  * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
- */
-/**
- * @brief Logic processor for the CONFIG_SENSOR command.
- * Syntax: CONFIG_SENSOR <id> IP <address>
- * Example: CONFIG_SENSOR 1 IP 192.158.1.100
  */
 std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     if (input.empty()) return {};

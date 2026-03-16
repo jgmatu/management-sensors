@@ -75,13 +75,16 @@ int main()
             try
             {
                 auto jv = json::parse(msg->to_string());
+                auto& obj = jv.as_object();
                 std::cout << "[CONFIG] Received Update: " << json::serialize(jv) << std::endl;
 
                 // Simulate config sensor process latency...
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-                std::cout << "[CONFIG] Publish commit config: " << json::serialize(jv) << std::endl;
-                std::string payload = boost::json::serialize(jv);
+                obj["channel"] = "config_events";
+                std::string payload = boost::json::serialize(obj);
+
+                std::cout << "[CONFIG] Publish commit config: " << json::serialize(obj) << std::endl;
 
                 client.publish(EVENTS_CONFIG_TOPIC, payload, 1, false);
             }
