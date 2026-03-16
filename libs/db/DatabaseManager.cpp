@@ -298,7 +298,7 @@ void DatabaseManager::run_listener_loop()
                     * connection is lost. If the connection is lost, it will throw an exception which we catch
                     * to handle reconnection logic if needed.
                 */
-                connection_listener_->wait_notification(); // Timeout of 1 second to allow periodic stop checks
+                connection_listener_->wait_notification();
             }
         }
         catch (const pqxx::broken_connection& e) {
