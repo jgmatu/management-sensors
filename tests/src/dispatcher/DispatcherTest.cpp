@@ -83,3 +83,38 @@ TEST(DispatcherTest, DispatchForUnknownIdDoesNothing)
     ResponseStatus s = d.wait_for_response(another_id, 10);
     EXPECT_EQ(s, ResponseStatus::TIMEOUT);
 }
+
+TEST(DispatcherTest, ReturnsSystemFullWhenTooManyPending)
+{
+    ScopedStreamSilencer silence_out(std::cout);
+    ScopedStreamSilencer silence_err(std::cerr);
+    Dispatcher d;
+    // MAX_PENDING en Dispatcher es 10000; usamos un margen amplio
+    const int warmup = 10;
+    for (int i = 0; i < warmup; ++i) {
+        (void)d.generate_id();
+    }
+    const int max_pending_approx = 10000;   // valor conocido de MAX_PENDING
+    const int extra = 2000;
+    const int total_waiters = max_pending_approx + extra;
+    std::vector<std::thread> waiters;
+    waiters.reserve(total_waiters);
+    std::atomic<int> system_full_count{0};
+    for (int i = 0; i < total_waiters; ++i)
+    {
+        uint64_t id = d.generate_id();
+        waiters.emplace_back([&, id]() {
+            // Timeout suficientemente grande para que los hilos "extra" vean el mapa lleno
+            auto status = d.wait_for_response(id, 1000);
+            if (status == ResponseStatus::SYSTEM_FULL) {
+                system_full_count.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (auto& t : waiters) {
+        t.join();
+    }
+    // Con tantos hilos por encima del límite, al menos uno debe ver SYSTEM_FULL
+    int count = system_full_count.load(std::memory_order_relaxed);
+    EXPECT_GT(count, 0) << "No waiter observed SYSTEM_FULL, possible bug in capacity guard";
+}
