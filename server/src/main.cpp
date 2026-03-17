@@ -92,9 +92,8 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     SensorCommandCli cli(request);
 
     std::string response;
-    u_int64_t request_id = 0;
 
-    std::cout << cli.command_ << std::endl;
+    std::cout << "[CLI] Command received: " << cli.command_ << std::endl;
 
     // Look up the 'cmd' field in the map
     auto it = command_registry.find(cli.command_.cmd);
