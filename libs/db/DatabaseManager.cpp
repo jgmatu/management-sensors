@@ -212,8 +212,6 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
-    std::cout << "[DB-Listener] Initialize listen event from channel: " << channel << std::endl;
-
     try 
     {
         if (!connection_listener_ || !connection_listener_->is_open()) {
@@ -227,17 +225,8 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
         // Use quote_name to avoid syntax errors with channel names
         nt.exec("LISTEN " + nt.quote_name(channel));
 
-        // nt is destroyed here when the scope ends, 
-        // ensuring no transaction is active for the next step.
-        std::cout << "[DB-Listener] Listen query commit: " << channel << std::endl;
-        nt.commit();
-
         // 1. Register the high-level handler in our map
         callbacks_[channel] = std::move(callback);
-
-        // 2. Use the dedicated listener connection to register the low-level SQL LISTEN
-        // The lambda here acts as the "bridge" between raw pqxx and your JSON logic
-        std::cout << "[DB-Listener] Listen query lambda: " << channel << std::endl;
 
         connection_listener_->listen(channel, [channel, this](const pqxx::notification& n) {
             std::function<void(boost::json::object)> handler;
@@ -273,7 +262,6 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
             */
         std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
     }
-    std::cout << "[DB-Listener] Finalize listen event from channel: " << channel << std::endl;
 }
 
 void DatabaseManager::run_listener_loop()

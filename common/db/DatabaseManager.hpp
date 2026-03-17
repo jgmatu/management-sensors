@@ -31,9 +31,60 @@ public:
 
     void parser_notify(const pqxx::notification& n, boost::json::object& msg);
 
+        /**
+     * @brief Registra un canal de escucha (LISTEN) y su manejador de eventos.
+     * 
+     * Esta función vincula un canal de PostgreSQL con una función callback personalizada.
+     * Utiliza la API moderna de libpqxx para gestionar las suscripciones de forma interna.
+     * 
+     * @param channel Nombre del canal de notificación (ej. "config_updates").
+     * @param handler Función callback (lambda) que procesará el JSON recibido.
+     * 
+     * @important FASE DE CONFIGURACIÓN: Este método debe ser invocado únicamente de forma 
+     * SECUENCIAL antes de arrancar el hilo de escucha mediante 'run_listener_loop()'. 
+     * Registrar canales mientras el listener está activo provocará condiciones de carrera, 
+     * ya que libpqxx no sincroniza internamente el mapa de manejadores.
+     * 
+     * @throw std::runtime_error si se intenta registrar un canal cuando el listener ya está en ejecución.
+     */
     void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
+
+    /**
+     * @brief Gestión del Listener Asíncrono de PostgreSQL (NOTIFY/LISTEN).
+     * 
+     * Esta sección permite la monitorización en tiempo real de cambios en la base de datos 
+     * mediante un hilo dedicado (std::jthread).
+     * 
+     * @note SEGURIDAD DE HILOS Y FLUJO CRÍTICO:
+     * Debido a que la implementación interna de libpqxx para el manejo de canales (listen) 
+     * no es segura para hilos (thread-safe), se ha definido un flujo de ejecución estricto:
+     * 
+     * 1. FASE DE REGISTRO (Secuencial): Se deben registrar todos los callbacks (handlers) 
+     *    mediante 'register_listen_async' ANTES de iniciar el hilo de escucha.
+     * 
+     * 2. FASE DE ACTIVACIÓN: Una vez configurados todos los canales necesarios, se invoca 
+     *    'run_listener_loop' para arrancar el hilo de fondo.
+     * 
+     * @warning No se deben registrar nuevos handlers una vez que el listener está en ejecución. 
+     * Intentar modificar la tabla de callbacks mientras el hilo de escucha está bloqueado 
+     * en 'await_notification' provocará una condición de carrera y corrupción de memoria.
+     */
     void run_listener_loop();
 
+    /**
+     * @brief Sincroniza y espera la finalización del hilo de escucha.
+     * 
+     * Este método bloquea el hilo llamante hasta que el hilo de fondo (listener_thread_) 
+     * termine su ejecución de forma segura. 
+     * 
+     * @note FLUJO DE CIERRE:
+     * Al utilizar 'std::jthread', el hilo recibe una señal de parada (stop_token). 
+     * Este método asegura que todos los recursos de red y descriptores de socket 
+     * asociados a la conexión de PostgreSQL se liberen correctamente antes de 
+     * que el objeto 'DatabaseManager' sea destruido.
+     * 
+     * @warning Debe invocarse únicamente durante la fase de apagado (shutdown) del sistema.
+     */
     void join();
 
     /**
