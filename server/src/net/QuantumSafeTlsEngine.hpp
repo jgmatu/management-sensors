@@ -233,7 +233,7 @@ public:
      * @param proc The function or lambda that defines how the server transforms 
      *             incoming decrypted requests into outgoing encrypted responses.
      */
-    void set_processor(SessionProcessor proc) { 
+    void set_processor(SessionProcessor proc) {
         processor_ = std::move(proc);
     }
 
