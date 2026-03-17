@@ -120,6 +120,41 @@ void DatabaseManager::upsert_sensor_state(int sensor_id, double temp)
     }
 }
 
+void DatabaseManager::upsert_sensor_config(int sensor_id, 
+                                          const std::string& hostname, 
+                                          const std::string& ip, 
+                                          bool is_active, 
+                                          uint64_t request_id)
+{
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    try
+    {
+        pqxx::work txn(*connection_queries_); // Or your main connection object
+
+        // UPSERT for sensor_config: Update if exists, Insert if not.
+        txn.exec(
+            "INSERT INTO sensor_config "
+                "(sensor_id, hostname, ip_address, is_active, request_id) "
+                "VALUES ($1, $2, $3, $4, $5) "
+                "ON CONFLICT (sensor_id) DO UPDATE SET "
+                "hostname   = EXCLUDED.hostname, "
+                "ip_address = EXCLUDED.ip_address, "
+                "is_active  = EXCLUDED.is_active, "
+                "request_id = EXCLUDED.request_id;",
+            pqxx::params{sensor_id, hostname, ip, is_active, request_id}
+        );
+
+        txn.commit();
+        std::cout << "[DB] Master config synced for Sensor " << sensor_id << std::endl;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[DB-Error] Upsert Master Config: " << e.what() << std::endl;
+        // Logic: You might want to throw or return a ResponseStatus::DB_ERROR here
+    }
+}
+
 void DatabaseManager::add_pending_config(int sensor_id, 
                                          const std::string& hostname, 
                                          const std::string& ip, 
@@ -169,11 +204,10 @@ void DatabaseManager::add_pending_config(int sensor_id,
 
 boost::json::object DatabaseManager::get_sanity_info()
 {
-    boost::json::object info;
-    
-    // Acquire lock to ensure connection_listener_ isn't being reset by another thread
     std::lock_guard<std::mutex> lock(conn_mutex_);
-    
+
+    boost::json::object info;
+
     if (!connection_queries_ || !connection_queries_->is_open()) {
         info["error"] = "Database connection not available";
         return info;
@@ -212,19 +246,20 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
+    std::cout << "[DB-Listener] Register channel: " << channel << std::endl;
+
     try 
     {
         if (!connection_listener_ || !connection_listener_->is_open()) {
             throw std::runtime_error("Database connection is not established.");
         }
-        std::cout << "[DB-Listener] Listen query: " << channel << std::endl;
 
         pqxx::nontransaction nt(*connection_listener_);
 
-        std::cout << "[DB-Listener] Listen nontransaction commit: " << channel << std::endl;
         // Use quote_name to avoid syntax errors with channel names
         nt.exec("LISTEN " + nt.quote_name(channel));
 
+        nt.commit();
         // 1. Register the high-level handler in our map
         callbacks_[channel] = std::move(callback);
 
@@ -267,6 +302,8 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
 void DatabaseManager::run_listener_loop()
 {
     if (listener_thread_) return;
+
+    std::cout << "[DB-Listener] Running wait notifications. " << std::endl;
 
     listener_thread_ = std::make_unique<std::jthread>([this](std::stop_token st) {
         try 

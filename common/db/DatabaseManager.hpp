@@ -67,7 +67,7 @@ public:
      * 
      * @warning No se deben registrar nuevos handlers una vez que el listener está en ejecución. 
      * Intentar modificar la tabla de callbacks mientras el hilo de escucha está bloqueado 
-     * en 'await_notification' provocará una condición de carrera y corrupción de memoria.
+     * en 'wait_notification' provocará una condición de carrera, deadlock o corrupción de memoria.
      */
     void run_listener_loop();
 
@@ -88,6 +88,27 @@ public:
     void join();
 
     /**
+     * @brief Performs an UPSERT (Insert or Update) of the sensor's master configuration.
+     * 
+     * This method synchronizes the 'sensor_config' table with the latest state. 
+     * If the 'sensor_id' already exists, it updates all fields (hostname, IP, status, 
+     * and request_id) with the provided values. If it doesn't exist, a new record is created.
+     * 
+     * @param sensor_id Unique identifier for the sensor (Primary Key).
+     * @param hostname The current/new hostname string for the sensor.
+     * @param ip The INET-compatible IP address string.
+     * @param is_active Boolean flag indicating if the sensor is currently enabled.
+     * @param request_id The uint64_t application-level ID used for tracking this state change.
+     * 
+     * @note This method should be called after a configuration change is successfully 
+     * acknowledged by the agent to ensure the master table reflects the real-world state.
+     * 
+     * @throw pqxx::sql_error If the database transaction fails or constraints are violated.
+     */
+    void upsert_sensor_config(int sensor_id, const std::string& hostname, const std::string& ip,
+        bool is_active, uint64_t request_id);
+
+                                          /**
      * @brief Queues a pending configuration change for a specific sensor.
      * 
      * @param sensor_id Unique identifier of the sensor.

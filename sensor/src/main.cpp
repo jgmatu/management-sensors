@@ -15,6 +15,40 @@ const std::string REQUEST_CONFIG_TOPIC { "config/requested" };
 const std::string EVENTS_CONFIG_TOPIC { "config/events" };
 const std::string TELEMETRY_TOPIC { "telemetry/state" };
 
+
+/**
+ * @brief Función de telemetría para el sensor.
+ */
+void run_telemetry_producer(std::stop_token st, mqtt::async_client& client, int sensor_id)
+{
+    std::default_random_engine generator;
+    std::uniform_real_distribution<double> distribution(30.0, 80.0);
+
+    std::cout << "[Telemetry] Sensor " << sensor_id << " producer started!" << std::endl;
+
+    while (!st.stop_requested()) {
+        try {
+            double temp = distribution(generator);
+
+            boost::json::object obj;
+            obj["sensor_id"] = sensor_id;
+            obj["temp"] = std::round(temp * 100.0) / 100.0;
+
+            std::string payload = boost::json::serialize(obj);
+
+            // Publicamos usando la API de Paho C++
+            // Importante: TELEMETRY_TOPIC debe ser const char* o std::string
+            client.publish(TELEMETRY_TOPIC, payload, 1, false);
+
+        } catch (const mqtt::exception& exc) {
+            std::cerr << "[Telemetry-Error] MQTT: " << exc.what() << std::endl;
+        }
+
+        // Espera de 10 segundos o hasta que se solicite la parada
+        std::this_thread::sleep_for(std::chrono::seconds(100000));
+    }
+}
+
 int main()
 {
     mqtt::async_client client(ADDRESS, CLIENT_ID);
@@ -24,10 +58,6 @@ int main()
         .keep_alive_interval(std::chrono::seconds(30))
         .finalize();
 
-    // Random temp generator (30.0 - 80.0 C)
-    std::default_random_engine generator;
-    std::uniform_real_distribution<double> distribution(30.0, 80.0);
-
     try
     {
         client.start_consuming();
@@ -35,36 +65,12 @@ int main()
         std::cout << "Connecting CPU Node: " << CLIENT_ID << "..." << std::endl;
         client.connect(connOpts)->wait();
 
-        // Subscribe to the config topic defined in your DB Trigger
-        client.subscribe(REQUEST_CONFIG_TOPIC, 1)->wait();
-
-        // 1. LAUNCH SENSOR THREAD (Background Telemetry)
         std::jthread telemetry_thread([&client](std::stop_token st) {
-            std::default_random_engine generator;
-            std::uniform_real_distribution<double> distribution(30.0, 80.0);
-
-            std::cout << "Start telemtry producer sensor!" << std::endl;
-
-            while (!st.stop_requested())
-            {
-                double temp = distribution(generator);
-
-                json::object obj;
-                obj["sensor_id"] = 1;
-                obj["temp"] = std::round(temp * 100.0) / 100.0;
-
-                std::string payload = boost::json::serialize(obj);
-
-                // Publish to "telemetry/state"
-                client.publish(TELEMETRY_TOPIC, payload, 1, false);
-
-                // I need see multiple callbaks register 
-                std::this_thread::sleep_for(std::chrono::milliseconds(10 * 1000));
-            }
+            run_telemetry_producer(st, client, 1);
         });
 
-        // 3. MAIN LOOP: Block and Wait for Config Requests
         std::cout << "[Main] Subscriber active. Waiting for 'config/requested'..." << std::endl;
+        client.subscribe(REQUEST_CONFIG_TOPIC, 1)->wait();
 
         for (;;)
         {

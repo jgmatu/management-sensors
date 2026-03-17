@@ -157,14 +157,16 @@ BEGIN
         payload = jsonb_build_object(
             'action', 'DELETE',
             'sensor_id', OLD.sensor_id,
-            'hostname', OLD.hostname
+            'hostname', OLD.hostname,
+            'request_id', OLD.request_id
         );
     ELSE
         payload = jsonb_build_object(
             'action', TG_OP,
             'sensor_id', NEW.sensor_id,
             'new_ip', NEW.ip_address::text,
-            'hostname', NEW.hostname
+            'hostname', NEW.hostname,
+            'request_id', NEW.request_id
         );
     END IF;
 
@@ -209,6 +211,7 @@ BEGIN
             'hostname',  NEW.new_hostname,
             'ip_address', NEW.new_ip_address,
             'is_active', NEW.new_is_active,
+            'request_id', NEW.request_id,
             'action',    TG_OP -- Returns 'INSERT' or 'UPDATE'
         )::text
     );
@@ -224,7 +227,8 @@ BEGIN
             'sensor_id', NEW.sensor_id,
             'error_code', NEW.error_code,
             'detail', NEW.error_detail,
-            'timestamp', NEW.occurred_at
+            'timestamp', NEW.occurred_at,
+            'request_id', NEW.request_id
         )::text
     );
     RETURN NEW;

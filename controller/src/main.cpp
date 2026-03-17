@@ -2,6 +2,7 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <functional>
 #include <mosquitto.h>
 
 #include <boost/json.hpp>
@@ -67,6 +68,47 @@ void on_db_event_received(boost::json::object msg)
     }
 }
 
+// Definimos el tipo de handler para mayor claridad
+using MqttHandler = std::function<void(const boost::json::object&)>;
+
+// El mapa de despacho (Literal Map)
+const std::unordered_map<std::string, MqttHandler> mqtt_dispatch_table = {
+    
+    {TELEMETRY_TOPIC, [](const boost::json::object& obj) {
+        int sensor_id = static_cast<int>(obj.at("sensor_id").as_int64());
+        double temp   = obj.at("temp").as_double();
+
+        std::cout << "[TELEMETRY] Node: " << sensor_id << " | Temp: " << temp << "°C" << std::endl;
+        g_db->upsert_sensor_state(sensor_id, temp);
+    }},
+
+    {EVENTS_CONFIG_TOPIC, [](const boost::json::object& obj) {
+        if (obj.contains("payload")) {
+            auto const& payload = obj.at("payload").as_object();
+            
+            int sensor_id        = payload.at("sensor_id").as_int64();
+            std::string hostname = payload.at("hostname").as_string().c_str();
+            std::string ip       = payload.at("ip_address").as_string().c_str();
+            bool is_active       = payload.at("is_active").as_bool();
+            std::string action   = payload.at("action").as_string().c_str();
+            u_int64_t request_id = payload.at("request_id").as_int64();
+
+            // 3. Complete Data Trace
+            std::cout << "------------------------------------------" << std::endl;
+            std::cout << "[CONFIG-EVENT] New Configuration Received" << std::endl;
+            std::cout << " > Action:   " << action << std::endl;
+            std::cout << " > Sensor:   " << sensor_id << std::endl;
+            std::cout << " > Hostname: " << hostname << std::endl;
+            std::cout << " > IP Addr:  " << ip << std::endl;
+            std::cout << " > Request ID:  " << request_id << std::endl;
+            std::cout << " > Status:   " << (is_active ? "ACTIVE" : "INACTIVE") << std::endl;
+            std::cout << "------------------------------------------" << std::endl;
+
+            g_db->upsert_sensor_config(sensor_id, hostname, ip, is_active, request_id);
+        }
+    }}
+};
+
 int main()
 {
     try
@@ -113,60 +155,38 @@ int main()
         std::cout << "MQTT Client initialized and connected globally." << std::endl;
 
         // LAUNCH SUBSCRIPTION AGENT (Background Listener for Dual Events)
-        std::jthread telemetry_subs_agent([](std::stop_token st) {
-            std::cout << "[Agent] Agent active. Listening for Telemetry and Config..." << std::endl;
-            
+        std::cout << "[Agent] Agent active. Listening for Telemetry and Config..." << std::endl;
+
+        // Subscribe to the config topic defined in your DB Trigger
+        g_mqtt_client->subscribe(EVENTS_CONFIG_TOPIC, 1)->wait();
+        g_mqtt_client->subscribe(TELEMETRY_TOPIC, 1)->wait();
+        try
+        {
+
             for (;;)
             {
-                try
+                auto msg = g_mqtt_client->consume_message();
+                if (!msg) continue;
+
+                std::string topic = msg->get_topic();
+                std::string payload = msg->to_string();
+                auto jv = boost::json::parse(payload);
+                auto obj = jv.as_object();
+
+                // Buscamos el tópico en nuestro mapa
+                auto it = mqtt_dispatch_table.find(topic);
+
+                if (it != mqtt_dispatch_table.end())
                 {
-                    if (g_mqtt_client && g_mqtt_client->is_connected())
-                    {
-                        auto msg = g_mqtt_client->consume_message();
-
-                        if (msg)
-                        {
-                            std::string topic = msg->get_topic();
-                            std::string payload = msg->to_string();
-                            auto jv = boost::json::parse(payload);
-                            auto obj = jv.as_object();
-
-                            std::cout << "********* TOPIC ******** : " << topic << std::endl;
-
-                            // --- SWITCH LOGIC BASED ON TOPIC ---
-                            if (topic == TELEMETRY_TOPIC)
-                            {
-                                // Event: Real-time sensor data
-                                std::cout << "[TELEMETRY] Node: " << obj["sensor_id"] << " | Temp: " << obj["temp"] << "°C" << std::endl;
-                                int sensor_id = static_cast<int>(obj.at("sensor_id").as_int64());
-                                double temp   = obj.at("temp").as_double();
-
-                                std::cout << "Update sensor state!" << std::endl;
-                                g_db->upsert_sensor_state(sensor_id, temp);
-                            } 
-                            else if (topic == EVENTS_CONFIG_TOPIC)
-                            {
-                                // Event: Configuration change from DB/PQC Engine
-                                std::cout << "[CONFIG] Update for ID " << obj["sensor_id"]  << " | New IP: " << obj["ip_address"] << std::endl;
-                                
-                                // Trigger logic: update local state or notify system
-                            }
-                            else
-                            {
-                                std::cout << "[Agent] Unknown Topic: " << topic << std::endl;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                    }
+                    it->second(obj);
+                    continue;
                 }
-                catch (const std::exception& e) {
-                    std::cerr << "[Agent-Error] " << e.what() << std::endl;
-                }
+                std::cout << "[Agent] Unknown Topic: " << topic << std::endl;
             }
-        });
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[Agent-Error] " << e.what() << std::endl;
+        }
     }
     catch (const mqtt::exception& exc) {
         std::cerr << "MQTT Init Error: " << exc.what() << std::endl;

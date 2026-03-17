@@ -201,9 +201,37 @@ void on_db_config_event_received(boost::json::object msg)
     JsonUtils::print(std::cout, msg);
     std::cout << std::endl;
 
-    // 3. Example Logic: If it's an 'alarm' type, log it specifically
-    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
-        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
+    if (msg.contains("payload"))
+    {
+        try
+        {
+            auto const& payload = msg.at("payload").as_object();
+
+            // 1. Extract Numeric Data (using int64 for uint64_t compatibility)
+            int sensor_id       = static_cast<int>(payload.at("sensor_id").as_int64());
+            uint64_t request_id = static_cast<uint64_t>(payload.at("request_id").as_int64());
+
+            // 2. Extract Strings using value_to for safety
+            std::string action   = boost::json::value_to<std::string>(payload.at("action"));
+            std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
+            std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
+
+            // 3. Trace Data
+            std::cout << "[CONFIG-EVENT] Received Request ID: " << request_id << std::endl;
+            std::cout << " > Action: " << action << " | Sensor: " << sensor_id << std::endl;
+            std::cout << " > New IP: " << new_ip << " | Hostname: " << hostname << std::endl;
+
+            // --- EVENTO: FINALIZACIÓN DE PETICIÓN DE CONFIGURACIÓN ---
+            // Despierta el hilo que originó la petición desde la línea de comandos (CLI).
+            // Se notifica el estatus (SUCCESS) para liberar el bloqueo 'wait_for_response'
+            // y permitir que el usuario reciba la confirmación del cambio en tiempo real.
+            std::cout << "[DEBUG] Dispatching SUCCESS for Request ID: " << request_id << " | Waking up CLI thread..." << std::endl;
+            g_dispatcher.dispatch(request_id, ResponseStatus::SUCCESS);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "[JSON-Error] Failed to parse config payload: " << e.what() << std::endl;
+        }
     }
 }
 
@@ -224,11 +252,6 @@ void on_db_state_event_received(boost::json::object msg)
     // 2. Use your existing JsonUtils to print the payload
     JsonUtils::print(std::cout, msg);
     std::cout << std::endl;
-
-    // 3. Example Logic: If it's an 'alarm' type, log it specifically
-    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
-        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
-    }
 }
 
 /**
