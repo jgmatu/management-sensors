@@ -24,8 +24,7 @@ using tcp_stream = typename boost::beast::tcp_stream::rebind_executor<
 class Basic_Credentials_Manager final : public Botan::Credentials_Manager
 {
    public:
-    Basic_Credentials_Manager(const std::string& server_crt,
-                              const std::string& server_key)
+    Basic_Credentials_Manager(const std::string& server_crt, const std::string& server_key)
     {
         Certificate_Info cert;
 
@@ -41,6 +40,7 @@ class Basic_Credentials_Manager final : public Botan::Credentials_Manager
             }
             catch (std::exception&)
             {
+                ;
             }
         }
 
@@ -96,9 +96,7 @@ std::shared_ptr<Botan::TLS::Policy> load_tls_policy()
     return std::make_shared<Botan::TLS::Policy>();
 }
 
-net::awaitable<void> do_session(
-    tcp_stream stream,
-    std::shared_ptr<Botan::TLS::Context> tls_ctx)
+net::awaitable<void> do_session(tcp_stream stream, std::shared_ptr<Botan::TLS::Context> tls_ctx)
 {
     constexpr std::size_t buffer_size = 8192;
 
@@ -107,14 +105,12 @@ net::awaitable<void> do_session(
 
     try
     {
-        co_await tls_stream.async_handshake(
-            Botan::TLS::Connection_Side::Server);
+        co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Client);
 
         std::vector<uint8_t> buffer(buffer_size);
         for (;;)
         {
-            std::size_t n =
-                co_await tls_stream.async_read_some(net::buffer(buffer));
+            std::size_t n = co_await tls_stream.async_read_some(net::buffer(buffer));
 
             if (n == 0)
             {
@@ -125,8 +121,7 @@ net::awaitable<void> do_session(
                 reinterpret_cast<const char*>(buffer.data()), n);
             std::cout << "[Proxy] Received from client: " << sv << '\n';
 
-            co_await tls_stream.async_write_some(
-                net::buffer(buffer.data(), n));
+            co_await tls_stream.async_write_some(net::buffer(buffer.data(), n));
         }
     }
     catch (const std::exception& e)
@@ -135,8 +130,7 @@ net::awaitable<void> do_session(
     }
 
     co_await tls_stream.async_shutdown();
-    tls_stream.next_layer().socket().shutdown(
-        tcp::socket::shutdown_both);
+    tls_stream.next_layer().socket().shutdown(tcp::socket::shutdown_both);
 }
 
 net::awaitable<void> do_listen(
@@ -150,8 +144,7 @@ net::awaitable<void> do_listen(
     {
         tcp::socket socket = co_await acceptor.async_accept();
 
-        net::co_spawn(
-            exec,
+        net::co_spawn(exec,
             do_session(
                 tcp_stream(std::move(socket)),
                 tls_ctx),
@@ -197,10 +190,7 @@ int main(int argc, char* argv[])
                 ioc.stop();
             });
 
-        net::co_spawn(
-            ioc,
-            do_listen(endpoint, tls_ctx),
-            net::detached);
+        net::co_spawn(ioc, do_listen(endpoint, tls_ctx), net::detached);
 
         std::cout << "[Proxy] Listening on port " << listen_port
                   << " (TLS 1.3, client side only)\n";
