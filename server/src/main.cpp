@@ -18,20 +18,13 @@
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
 #include <dispatcher/Dispatcher.hpp>
+#include <cli/SensorCommandCli.hpp>
 
 #define REQUEST_TIMEOUT_MS 2 * 1000
 
 // Global database handle shared between TLS engine worker threads and main.
 std::shared_ptr<DatabaseManager> g_db;
 Dispatcher g_dispatcher;
-
-struct SensorCommand {
-    std::string cmd;
-    int id = -1;
-    std::string attr;
-    std::string value;
-    bool valid = false;
-};
 
 // Helper to convert status to human-readable string
 std::string status_to_string(ResponseStatus status) {
@@ -83,59 +76,7 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
     }}
 };
 
-/**
- * @brief Parse a single-line sensor CLI command.
- *
- * Expected syntax:
- *   <CMD> <ID> <ATTR> <VALUE>
- * Example:
- *   CONFIG_IP 42 ip 192.168.0.10
- *
- * On any parse error the returned struct has valid == false.
- */
-SensorCommand parse_sensor_command(const std::string& request) {
-    SensorCommand sc;
-    std::istringstream iss(request);
-    
-    // Mark invalid by default; we only flip this at the very end.
-    sc.valid = false;
 
-    // Extract tokens one by one and bail out early on any failure.
-    if (!(iss >> sc.cmd)) return sc;
-    
-    // Attempt to extract the ID as an integer
-    if (!(iss >> sc.id)) {
-        // ID is not a valid int -> command is invalid.
-        return sc;
-    }
-
-    if (!(iss >> sc.attr)) return sc;
-    if (!(iss >> sc.value)) return sc;
-
-    // Final check: reject commands with trailing garbage.
-    std::string extra;
-    if (iss >> extra) {
-        // If there's more data (like a 5th word), the command is malformed.
-        return sc;
-    }
-
-    // If we reached here, the basic structure is correct.
-    sc.valid = true;
-    return sc;
-}
-
-/**
- * @brief Pretty-printer for SensorCommand for debugging.
- */
-std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
-    os << "[SensorCommand] " << "\n"
-       << (sc.valid ? "VALID" : "INVALID") << "\n"
-       << "  Command: " << (sc.cmd.empty() ? "N/A" : sc.cmd) << "\n"
-       << "  ID:      " << sc.id << "\n"
-       << "  Attr:    " << (sc.attr.empty() ? "N/A" : sc.attr) << "\n"
-       << "  Value:   " << (sc.value.empty() ? "N/A" : sc.value);
-    return os;
-}
 
 /**
  * @brief Process one decrypted TLS request and build a plaintext reply.
@@ -146,24 +87,25 @@ std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
  */
 std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     if (input.empty()) return {};
-
     const std::string request(input.begin(), input.end());
-    const SensorCommand sc = parse_sensor_command(request);
+
+    SensorCommandCli cli(request);
+
     std::string response;
     u_int64_t request_id = 0;
 
-    std::cout << sc << std::endl;
+    std::cout << cli.command_ << std::endl;
 
     // Look up the 'cmd' field in the map
-    auto it = command_registry.find(sc.cmd);
+    auto it = command_registry.find(cli.command_.cmd);
 
     if (it != command_registry.end())
     {
-        response = it->second(sc); // Execute the lambda passing the whole struct
+        response = it->second(cli.command_); // Execute the lambda passing the whole struct
     }
     else
     {
-        response = "Command '" + sc.cmd + "' not found in registry.";
+        response = "Command '" + cli.command_.cmd + "' not found in registry.";
     }
 
     return std::vector<uint8_t>(response.begin(), response.end());
