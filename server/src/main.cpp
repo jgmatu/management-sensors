@@ -8,14 +8,9 @@
  *   www.boost.org/doc/libs/1_83_0/libs/beast/example/http/server/awaitable/http_server_awaitable.cpp
  */
 
-#include <chrono>
-#include <concepts>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 #include <map>
 
@@ -26,8 +21,7 @@
 
 #define REQUEST_TIMEOUT_MS 2 * 1000
 
-// Global pointer to the Database Manager
-// Shared across the TLS Engine threads and the Main thread
+// Global database handle shared between TLS engine worker threads and main.
 std::shared_ptr<DatabaseManager> g_db;
 Dispatcher g_dispatcher;
 
@@ -53,23 +47,30 @@ std::string status_to_string(ResponseStatus status) {
 
 const std::map<std::string, std::function<std::string(const SensorCommand&)>> command_registry = {
     {"CONFIG_IP", [](const SensorCommand& sc) -> std::string {
-        // 1. Generate unique uint64_t ID
+        // Generate a unique correlation ID for this CLI request.
         uint64_t request_id = g_dispatcher.generate_id();
 
-        std::cout << "Request ID: " << request_id << std::endl;
-        // 2. Persist to DB (using the INSERT we updated earlier)
-        // hostname: "sensor-X", ip: sc.value, active: true
+        std::cout << "[CLI] New CONFIG_IP request created"
+                  << " | sensor_id=" << sc.id
+                  << " | request_id=" << request_id
+                  << std::endl;
+        // Persist the pending configuration so the controller can pick it up.
+        // We store: sensor id, hostname "sensor-<id>", requested IP and active flag.
         g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true, request_id);
 
-        // --- FASE DE ESPAERA: SINCRONIZACIÓN DE PETICIÓN CLI ---
-        // Se inicia el bloqueo del hilo actual (CLI) para esperar la confirmación 
-        // asíncrona (MQTT/DB-Notify) mediante el request_id generado.
-        std::cout << "[DEBUG] CLI Thread: Waiting for response [ReqID: " << request_id  << "] (Timeout: " << REQUEST_TIMEOUT_MS << "ms)..." << std::endl;
+        // Block the CLI thread until the async DB notification for this
+        // request_id arrives (or until the timeout expires).
+        std::cout << "[CLI] Waiting for DB confirmation"
+                  << " | request_id=" << request_id
+                  << " | timeout_ms=" << REQUEST_TIMEOUT_MS
+                  << std::endl;
         auto status = g_dispatcher.wait_for_response(request_id, REQUEST_TIMEOUT_MS);
 
-        // --- FASE DE ACTIVACIÓN: RESPUESTA RECIBIDA ---
-        // El hilo ha sido despertado. Procedemos a registrar el resultado en los logs.
-        std::cout << "[DEBUG] CLI Thread: Awake! [ReqID: " << request_id  << "] | Final Status: " << status_to_string(status) << std::endl;
+        // Response received (or timeout). Log final status in a compact form.
+        std::cout << "[CLI] DB wait finished"
+                  << " | request_id=" << request_id
+                  << " | status=" << status_to_string(status)
+                  << std::endl;
 
         if (status == ResponseStatus::SUCCESS) {
             return "OK: Sensor " + std::to_string(sc.id) + " updated successfully.";
@@ -77,61 +78,54 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
         return "ERROR: " + status_to_string(status) + " (ID: " + std::to_string(request_id) + ")";
     }},
     {"REBOOT", [](const SensorCommand& sc) -> std::string {
-        // Example of adding another command easily
+        // Example command placeholder – real reboot logic can be plugged in here.
         return "OK: Rebooting sensor " + std::to_string(sc.id);
     }}
 };
 
 /**
- * @brief Improved parser for sensor CLI syntax.
- * Handles trailing spaces, malformed IDs, and stream fail states.
- * 
- * @note MEMORY SAFETY & PERFORMANCE:
- * This function returns the 'SensorCommand' struct by value. Thanks to 
- * **RVO (Return Value Optimization)** and **Copy Elision** (standard in C++20/GCC 14), 
- * the compiler constructs the object directly in the caller's stack frame. 
- * This avoids expensive copies and eliminates the risk of **Segmentation Faults** 
- * or "Dangling Pointers" typically associated with returning pointers to 
- * local stack variables.
- * 
- * @param request The raw string received from the TLS session.
- * @return A self-contained SensorCommand object.
+ * @brief Parse a single-line sensor CLI command.
+ *
+ * Expected syntax:
+ *   <CMD> <ID> <ATTR> <VALUE>
+ * Example:
+ *   CONFIG_IP 42 ip 192.168.0.10
+ *
+ * On any parse error the returned struct has valid == false.
  */
 SensorCommand parse_sensor_command(const std::string& request) {
     SensorCommand sc;
     std::istringstream iss(request);
     
-    // 1. Clear the struct and mark invalid by default
+    // Mark invalid by default; we only flip this at the very end.
     sc.valid = false;
 
-    // 2. Extract tokens one by one and check the stream state
+    // Extract tokens one by one and bail out early on any failure.
     if (!(iss >> sc.cmd)) return sc;
     
     // Attempt to extract the ID as an integer
     if (!(iss >> sc.id)) {
-        // If ID is not a valid int, the stream fails. 
-        // We must clear it if we want to continue, but here we just return invalid.
+        // ID is not a valid int -> command is invalid.
         return sc;
     }
 
     if (!(iss >> sc.attr)) return sc;
     if (!(iss >> sc.value)) return sc;
 
-    // 3. Final check: Ensure there isn't UNEXPECTED extra data
+    // Final check: reject commands with trailing garbage.
     std::string extra;
     if (iss >> extra) {
-        // If there's more data (like a 5th word), the command is malformed
+        // If there's more data (like a 5th word), the command is malformed.
         return sc;
     }
 
-    // 4. If we reached here, the basic structure is correct
+    // If we reached here, the basic structure is correct.
     sc.valid = true;
     return sc;
 }
 
 /**
- * @brief Helper to print the SensorCommand state.
- * Useful for debugging race conditions or malformed CLI inputs.
+ * @brief Pretty-printer for SensorCommand for debugging.
  */
 std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
     os << "[SensorCommand] " << "\n"
@@ -144,26 +138,11 @@ std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
 }
 
 /**
- * @brief Main logic processor for decrypted TLS traffic.
- * 
- * @warning CONCURRENCY ALERT: This function is executed by the Boost.Asio 
- * thread pool. Multiple instances of this function may run simultaneously 
- * on different threads for different client sessions. 
- * 
- * @note SHARED RESOURCES: Any access to global variables, static members, 
- * or shared objects (like DatabaseManager) MUST be protected by a 
- * std::mutex or use std::atomic types to prevent race conditions.
+ * @brief Process one decrypted TLS request and build a plaintext reply.
  *
- * @section Synchronicity & Response Handling:
- * To receive the final configuration response, a message queue must be 
- * implemented to hold the thread until the final configuration resolution 
- * is achieved. The callback will remain in a blocking state, waiting 
- * for a message to arrive in the queue containing the final response. 
- * This final response will be received through the Database Listener, 
- * triggered by the Controller Process once the sensor update is finalized.
- *
- * @param input The raw decrypted bytes received from the TLS client.
- * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
+ * This function runs in the TLS server worker threads. It parses the
+ * incoming CLI-like command, dispatches it to the corresponding handler
+ * in `command_registry`, and returns the resulting message as bytes.
  */
 std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     if (input.empty()) return {};
@@ -198,13 +177,13 @@ void on_db_config_event_received(boost::json::object msg)
 {
     if (msg.empty()) return;
 
-    std::cout << "************ COMMITED CONFIG EVENT! *************" << std::endl;
+    std::cout << "************ COMMITTED CONFIG EVENT *************" << std::endl;
 
-    // 1. Extract the channel for logging
+    // Log which PostgreSQL channel produced this message.
     std::string_view channel = msg.at("channel").as_string();
     std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
 
-    // 2. Use your existing JsonUtils to print the payload
+    // Dump the full JSON payload for debugging/traceability.
     JsonUtils::print(std::cout, msg);
     std::cout << std::endl;
 
@@ -214,24 +193,22 @@ void on_db_config_event_received(boost::json::object msg)
         {
             auto const& payload = msg.at("payload").as_object();
 
-            // 1. Extract Numeric Data (using int64 for uint64_t compatibility)
+            // Compact numeric extraction (int64 covers PostgreSQL integer range).
             int sensor_id       = static_cast<int>(payload.at("sensor_id").as_int64());
             uint64_t request_id = static_cast<uint64_t>(payload.at("request_id").as_int64());
 
-            // 2. Extract Strings using value_to for safety
+            // Extract string fields using value_to for type safety.
             std::string action   = boost::json::value_to<std::string>(payload.at("action"));
             std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
             std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
 
-            // 3. Trace Data
+            // Trace important fields for observability.
             std::cout << "[CONFIG-EVENT] Received Request ID: " << request_id << std::endl;
             std::cout << " > Action: " << action << " | Sensor: " << sensor_id << std::endl;
             std::cout << " > New IP: " << new_ip << " | Hostname: " << hostname << std::endl;
 
-            // --- EVENTO: FINALIZACIÓN DE PETICIÓN DE CONFIGURACIÓN ---
-            // Despierta el hilo que originó la petición desde la línea de comandos (CLI).
-            // Se notifica el estatus (SUCCESS) para liberar el bloqueo 'wait_for_response'
-            // y permitir que el usuario reciba la confirmación del cambio en tiempo real.
+            // Signal completion of the configuration request to the waiting
+            // CLI thread that originated this request_id.
             std::cout << "[MAIN] Dispatching SUCCESS for Request ID: " << request_id << std::endl;
             g_dispatcher.dispatch(request_id, ResponseStatus::SUCCESS);
         }
@@ -250,13 +227,13 @@ void on_db_state_event_received(boost::json::object msg)
 {
     if (msg.empty()) return;
 
-    std::cout << "************ STATE TELEMETRY EVENT! *************" << std::endl;
+    std::cout << "************ STATE TELEMETRY EVENT *************" << std::endl;
 
-    // 1. Extract the channel for logging
+    // Log which PostgreSQL channel produced this message.
     std::string_view channel = msg.at("channel").as_string();
     std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
 
-    // 2. Use your existing JsonUtils to print the payload
+    // Dump the full JSON payload for debugging/traceability.
     JsonUtils::print(std::cout, msg);
     std::cout << std::endl;
 }
@@ -269,17 +246,17 @@ void on_db_error_event_received(boost::json::object msg)
 {
     if (msg.empty()) return;
 
-    std::cout << "************ ERROR DATABASE EVENT! *************" << std::endl;
+    std::cout << "************ ERROR DATABASE EVENT *************" << std::endl;
 
-    // 1. Extract the channel for logging
+    // Log which PostgreSQL channel produced this message.
     std::string_view channel = msg.at("channel").as_string();
     std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
 
-    // 2. Use your existing JsonUtils to print the payload
+    // Dump the full JSON payload for debugging/traceability.
     JsonUtils::print(std::cout, msg);
     std::cout << std::endl;
 
-    // 3. Example Logic: If it's an 'alarm' type, log it specifically
+    // Example logic: highlight alarm-type events specially.
     if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
         std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
     }

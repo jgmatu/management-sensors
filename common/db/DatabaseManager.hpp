@@ -13,12 +13,50 @@
 class DatabaseManager {
 
 public:
+
+    /**
+     * @brief Constructor: Inicializa el DatabaseManager con la cadena de conexión.
+     *
+     * El constructor recibe una cadena de conexión a PostgreSQL y la almacena internamente.
+     * No abre la conexión de inmediato: simplemente prepara el objeto para cuando se llame connect().
+     * También inicializa el puntero al hilo de escucha (listener_thread_) como nulo.
+     */
     DatabaseManager(const std::string& connection_str);
 
+    /**
+     * @brief Destructor: Limpieza y desconexión completa.
+     * 
+     * El destructor de DatabaseManager garantiza una finalización segura y ordenada del objeto:
+     *   - Llama internamente a disconnect() para cerrar las conexiones físicas a la base de datos, 
+     *     despertando cualquier hilo bloqueado en espera de notificaciones.
+     *   - Sincroniza y detiene el hilo de escucha si está activo, asegurando que todos los recursos 
+     *     y trabajos pendientes hayan finalizado antes de destruir el objeto.
+     *   - Libera (reset) los smart pointers asociados a las conexiones para evitar cualquier acceso 
+     *     futuro accidental y garantizar el borrado de los objetos gestionados.
+     *   - Proporciona trazas std::cout para depuración y verificación de una limpieza adecuada.
+     *
+     * No se debe acceder a ninguna conexión ni a recursos asociados después de que el destructor haya terminado.
+     */
     virtual ~DatabaseManager();
 
-    // Establish connection
+    /**
+     * @brief Establece una conexión a la base de datos.
+     * 
+     * Inicializa las conexiones de escucha y de consulta a PostgreSQL.
+     * Esta función es segura ante múltiples llamadas y libera los recursos asociados.
+     * 
+     * @throws std::runtime_error si la conexión falla.
+     */
     void connect();
+
+    /**
+     * @brief Desconecta las conexiones activas a la base de datos.
+     * 
+     * Cierra de manera segura las conexiones abiertas de escucha y de consulta a PostgreSQL.
+     * Esta función es segura ante múltiples llamadas y libera los recursos asociados.
+     * 
+     * @throws No lanza excepciones si las conexiones ya están cerradas.
+     */
     void disconnect();
 
     // Example: Execute a simple query
@@ -27,33 +65,56 @@ public:
     // Example: Fetch data (returns a result set)
     pqxx::result query(const std::string& sql);
 
+    /**
+     * @brief Obtiene información de salud y estado de la base de datos.
+     * 
+     * Realiza una consulta simple a la base de datos para obtener información sobre el servidor PostgreSQL,
+     * como la versión del servidor, el tiempo de actividad, el PID del backend y la versión de pqxx.
+     * 
+     * @return Un objeto boost::json::object con la información obtenida.
+     * 
+     * @throws std::runtime_error si la consulta falla o no hay conexión disponible.
+     */
     boost::json::object get_sanity_info();
 
-    void parser_notify(const pqxx::notification& n, boost::json::object& msg);
-
-        /**
+    /**
      * @brief Registra un canal de escucha (LISTEN) y su manejador de eventos.
      * 
-     * Esta función vincula un canal de PostgreSQL con una función callback personalizada.
-     * Utiliza la API moderna de libpqxx para gestionar las suscripciones de forma interna.
+     * Este método asocia un canal de notificación de PostgreSQL con un callback (lambda) que
+     * recibirá el mensaje JSON cuando se produzca una notificación NOTIFY en dicho canal.
      * 
-     * @param channel Nombre del canal de notificación (ej. "config_updates").
-     * @param handler Función callback (lambda) que procesará el JSON recibido.
+     * # Ciclo de Vida y Seguridad del Registro
      * 
-     * @important FASE DE CONFIGURACIÓN: Este método debe ser invocado únicamente de forma 
-     * SECUENCIAL antes de arrancar el hilo de escucha mediante 'run_listener_loop()'. 
-     * Registrar canales mientras el listener está activo provocará condiciones de carrera, 
-     * ya que libpqxx no sincroniza internamente el mapa de manejadores.
+     * - **FASE DE CONFIGURACIÓN**: Todos los registros de canales y sus handlers deben realizarse 
+     *   EXCLUSIVAMENTE en la fase de configuración inicial, antes de arrancar el hilo de escucha
+     *   mediante 'run_listener_loop()'.
+     * - No está permitido (ni es seguro) invocar este método una vez que el listener asíncrono 
+     *   esté en ejecución, debido a la falta de sincronización interna en el manejo de callbacks
+     *   de libpqxx (no es thread-safe).
+     * - El registro dinámico de nuevos canales mientras el hilo de escucha está activo puede provocar
+     *   race conditions, deadlocks o corrupción de memoria.
      * 
-     * @throw std::runtime_error si se intenta registrar un canal cuando el listener ya está en ejecución.
+     * # Parámetros
+     * @param channel Nombre del canal de notificación de PostgreSQL (ej. "config_updates").
+     * @param handler Callback a invocar cuando se reciba una notificación en el canal, recibe
+     *        un objeto boost::json::object con el payload decodificado.
+     * 
+     * # Excepciones
+     * @throw std::runtime_error Si se intenta registrar un canal cuando el listener ya está en ejecución.
+     * 
+     * # Uso recomendado
+     * Este método solo debe llamarse durante el arranque, en un flujo de creación SECUENCIAL, 
+     * antes de invocar 'run_listener_loop'. Una vez iniciado el hilo de escucha, el registro 
+     * de nuevos canales no será aceptado y lanzará una excepción.
      */
     void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
 
     /**
-     * @brief Gestión del Listener Asíncrono de PostgreSQL (NOTIFY/LISTEN).
+     * @brief Inicia el bucle de escucha asíncrono para recibir notificaciones de PostgreSQL.
      * 
-     * Esta sección permite la monitorización en tiempo real de cambios en la base de datos 
-     * mediante un hilo dedicado (std::jthread).
+     * Este método arranca un hilo de fondo que permanece en espera de notificaciones de PostgreSQL
+     * mediante 'wait_notification()'. Cuando se recibe una notificación, invoca el callback
+     * asociado (si existe) para procesar el mensaje JSON.
      * 
      * @note SEGURIDAD DE HILOS Y FLUJO CRÍTICO:
      * Debido a que la implementación interna de libpqxx para el manejo de canales (listen) 
@@ -108,13 +169,19 @@ public:
     void upsert_sensor_config(int sensor_id, const std::string& hostname, const std::string& ip,
         bool is_active, uint64_t request_id);
 
-                                          /**
+    /**
      * @brief Queues a pending configuration change for a specific sensor.
      * 
      * @param sensor_id Unique identifier of the sensor.
      * @param hostname New hostname to be assigned.
      * @param ip New IP address (v4 or v6).
      * @param is_active Desired operational state.
+     * @param request_id The uint64_t application-level ID used for tracking this state change.
+     * 
+     * @note This method should be called after a configuration change is successfully 
+     * acknowledged by the agent to ensure the master table reflects the real-world state.
+     * 
+     * @throw pqxx::sql_error If the database transaction fails or constraints are violated.
      */
     void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip,
         bool is_active, u_int64_t request_id);
@@ -138,6 +205,28 @@ public:
     void upsert_sensor_state(int sensor_id, double temp);
 
 private:
+
+    /**
+     * @brief Procesa y parsea las notificaciones recibidas desde PostgreSQL.
+     * 
+     * Esta función es llamada internamente cuando se recibe una notificación en uno de los canales
+     * registrados (por ejemplo, a través de LISTEN/NOTIFY). Se encarga de interpretar los datos
+     * recibidos (payload) y transformar el contenido del mensaje, generalmente en formato JSON,
+     * para su posterior manejo por los callbacks registrados.
+     * 
+     * @param n Referencia a la notificación recibida (pqxx::notification).
+     * @param msg Objeto JSON de Boost donde se almacena el resultado parseado.
+     * 
+     * @details 
+     * - Realiza las validaciones necesarias para garantizar la integridad del mensaje recibido.
+     * - Es utilizada normalmente junto con el mecanismo de escucha asincrónica de PostgreSQL (LISTEN/NOTIFY).
+     * - Si el payload no es un JSON válido, puede poblar 'msg' con información de error o advertencia.
+     * - La función no lanza excepciones pero puede dejar el objeto JSON vacío o con un campo "error".
+     * 
+     * @note Esta función es privada y su uso está restringido a la infraestructura interna de manejo
+     *       de eventos provenientes de la base de datos.
+     */
+    void parser_notify(const pqxx::notification& n, boost::json::object& msg);
 
     std::string conn_str_;
     std::unique_ptr<std::jthread> listener_thread_;

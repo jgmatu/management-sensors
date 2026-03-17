@@ -3,6 +3,14 @@
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "xaver.clang-format"
     },
+    "[c]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "xaver.clang-format"
+    },
+
+    // Fuerza a clang-format a usar el fichero de estilo del proyecto
+    "clang-format.style": "file",
+
     "C_Cpp.codeAnalysis.clangTidy.enabled": true,
     "C_Cpp.default.cppStandard": "c++20",
     "C_Cpp.default.cStandard": "c17",
@@ -13,5 +21,5 @@
     "C_Cpp.errorSquiggles": "disabled",
     "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
         "clang-diagnostic-error"
-    ],
+    ]
 }

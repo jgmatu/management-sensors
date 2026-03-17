@@ -14,10 +14,9 @@ DatabaseManager::~DatabaseManager()
     // permitiendo que el jthread salga de su bucle.
     disconnect();
 
-    // 2. Sincronizar hilos
-    // jthread hace join automático, pero llamarlo aquí asegura 
-    // que el objeto no termine de destruirse hasta que el hilo de escucha muera.
-    if (listener_thread_->joinable())
+    // 2. Sincronizar hilo de escucha (si fue arrancado)
+    // Puede ser nullptr si nunca se llamó a run_listener_loop().
+    if (listener_thread_ && listener_thread_->joinable())
     {
         listener_thread_->request_stop(); // Señal adicional de C++20
         listener_thread_->join();
@@ -342,7 +341,7 @@ void DatabaseManager::run_listener_loop()
 
 void DatabaseManager::join()
 {
-    if (listener_thread_->joinable()) {
+    if (listener_thread_ && listener_thread_->joinable()) {
         listener_thread_->join();
     }
 }

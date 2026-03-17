@@ -26,11 +26,19 @@ compile_commands.json
 # --- IDEs & Editors ---
 .vscode/
 .idea/
+.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/skills-cursor/
 *.swp
 *.swo
 *~
 .clang-format
 .clangd/
+.cache/
+.vscode/
+.cursor-user-data/
+.vscode-user-data/
 
 # --- Debugging & Core Dumps ---
 gmon.out

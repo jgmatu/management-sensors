@@ -1,4 +1,5 @@
 #include "QuantumSafeTlsEngine.hpp"
+#include <fstream>
 
 using tcp_stream = typename boost::beast::tcp_stream::rebind_executor<
     boost::asio::use_awaitable_t<>::executor_with_default<boost::asio::any_io_executor>>::other;
@@ -6,10 +7,19 @@ using tcp_stream = typename boost::beast::tcp_stream::rebind_executor<
 /**
  * @brief Constructor inicializando el puerto por defecto.
  */
-QuantumSafeTlsEngine::QuantumSafeTlsEngine(uint16_t port,  const std::string& cert_path, 
-    const std::string& key_path, const std::string& policy_path, uint64_t ocsp_cache_time,
-        uint64_t ocsp_timeout) :
-        processor_(nullptr)
+QuantumSafeTlsEngine::QuantumSafeTlsEngine(uint16_t port,
+                                           const std::string& cert_path,
+                                           const std::string& key_path,
+                                           const std::string& policy_path,
+                                           uint64_t ocsp_cache_time,
+                                           uint64_t ocsp_timeout)
+    : processor_(nullptr),
+      port_(port),
+      cert_path_(cert_path),
+      key_path_(key_path),
+      policy_path_(policy_path),
+      ocsp_cache_time_(ocsp_cache_time),
+      ocsp_timeout_(ocsp_timeout)
 {
     creds_ = std::make_shared<Basic_Credentials_Manager>(cert_path, key_path);
     rng_ = std::make_shared<Botan::AutoSeeded_RNG>();
@@ -20,7 +30,6 @@ QuantumSafeTlsEngine::QuantumSafeTlsEngine(uint16_t port,  const std::string& ce
         std::chrono::seconds(ocsp_timeout));
     endpoint_ = boost::asio::ip::tcp::endpoint(boost::asio::ip::make_address("0.0.0.0"), port);
 
-    // Inicialización del atributo de clase con el hint de hilos
     const auto num_threads = std::thread::hardware_concurrency();
     io_context_ = std::make_unique<boost::asio::io_context>(static_cast<int>(num_threads));
 }
@@ -187,13 +196,7 @@ std::shared_ptr<Botan::TLS::Policy> QuantumSafeTlsEngine::load_tls_policy(
     }
 
     // if something we don't recognize, assume it's a file
-    std::ifstream policy_stream(policy_type);
-    if (!policy_stream.good())
-    {
-        throw std::runtime_error(
-            "Unknown TLS policy: not a file or known short name");
-    }
-
+    std::ifstream policy_stream(policy_type.c_str(), std::ios::in);
     return std::make_shared<Botan::TLS::Text_Policy>(policy_stream);
 }
 

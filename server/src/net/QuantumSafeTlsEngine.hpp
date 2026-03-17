@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 #include <iostream>
-#include <fstream>
 #include <thread>
 
 #include <boost/asio/co_spawn.hpp>
@@ -20,8 +19,8 @@
 
 #include <oscp/ocsp_cache.hpp>
 
+
 namespace beast = boost::beast;    // from <boost/beast.hpp>
-namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 
@@ -150,19 +149,29 @@ class TlsHttpCallbacks final : public Botan::TLS::StreamCallbacks
  */
 class QuantumSafeTlsEngine {
 public:
-    explicit QuantumSafeTlsEngine(uint16_t port,  const std::string& cert_path, 
-    const std::string& key_path, const std::string& policy_path, uint64_t ocsp_cache_time,
-        uint64_t ocsp_timeout);
+    /**
+     * @brief Constructor for the QuantumSafeTlsEngine.
+     * 
+     * @param port The port number to listen on.
+     * @param cert_path The path to the server's certificate chain.
+     * @param key_path The path to the server's certificate private key file.
+     * @param policy_path The path to the TLS policy file.
+     * @param ocsp_cache_time The time to cache OCSP responses in minutes.
+     * @param ocsp_timeout The timeout for OCSP requests in seconds.
+     */
+    explicit QuantumSafeTlsEngine(uint16_t port,
+                                  const std::string& cert_path,
+                                  const std::string& key_path,
+                                  const std::string& policy_path,
+                                  uint64_t ocsp_cache_time,
+                                  uint64_t ocsp_timeout);
 
+    /**
+     * @brief Destructor for the QuantumSafeTlsEngine.
+     * 
+     * This destructor is default and does not perform any additional cleanup.
+     */
     virtual ~QuantumSafeTlsEngine() = default;
-
-    // Eliminar copia para evitar problemas con recursos TLS
-    // QuantumSafeTlsEngine(const QuantumSafeTlsEngine&) = delete;
-    // QuantumSafeTlsEngine& operator=(const QuantumSafeTlsEngine&) = delete;
-
-    // Permitir movimiento
-    // QuantumSafeTlsEngine(QuantumSafeTlsEngine&&) noexcept = default;
-    // QuantumSafeTlsEngine& operator=(QuantumSafeTlsEngine&&) noexcept = default;
 
     /**
      * @brief Performs the cryptographic and network setup for the Quantum-Safe engine.
@@ -248,7 +257,15 @@ private:
     // Handler para procesar datos de la sesión, inyectable para flexibilidad
     SessionProcessor processor_;
 
-    // Botan Core
+    // Botan / PQC core configuration (captured from constructor)
+    uint16_t port_{0};
+    std::string cert_path_;
+    std::string key_path_;
+    std::string policy_path_;
+    uint64_t ocsp_cache_time_{0};
+    uint64_t ocsp_timeout_{0};
+
+    // Botan Core runtime objects (materialized in initialize())
     std::shared_ptr<Botan::AutoSeeded_RNG> rng_;
     std::shared_ptr<Basic_Credentials_Manager> creds_;
     std::shared_ptr<Botan::TLS::Session_Manager> session_mgr_;

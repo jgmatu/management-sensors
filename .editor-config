@@ -9,5 +9,5 @@ indent_style = space
 trim_trailing_whitespace = true
 
 [*.{cpp,h}]
-indent_size = 3
-tab_width = 3
+indent_size = 4
+tab_width = 4
