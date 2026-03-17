@@ -47,7 +47,7 @@ void QuantumSafeTlsEngine::initialize()
             });
         }
 
-        std::cout << "[PQC-Engine] SERVER READY! (Running in background)" << std::endl;
+        std::cout << "[PQC-Engine] server ready (Running in background)" << std::endl;
         // No io_context_->run() here! The function returns immediately.
     }
     catch (const std::exception& e) 
@@ -170,7 +170,6 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_listen(
         auto socket = co_await acceptor.async_accept();
 
         // 4. Spawn the session using the retrieved executor 'exec'
-        std::cout << "Spawn async task and wait again to accept connection again!" << std::endl;
         boost::asio::co_spawn(
             exec,
             do_session(tcp_stream(std::move(socket)), tls_ctx, ocsp_cache),

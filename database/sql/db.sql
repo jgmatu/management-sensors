@@ -119,7 +119,8 @@ CREATE TABLE sensor_config_pending (
     new_hostname   VARCHAR(100),
     new_ip_address INET,
     new_is_active  BOOLEAN,
-    request_id     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    requested_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    request_id     BIGINT
 );
 
 -- 2.5. TABLA DE ERRORES (Persistencia de fallos)
@@ -131,7 +132,8 @@ CREATE TABLE sensor_config_errors (
     error_code     VARCHAR(50), 
     error_detail   TEXT,
     failed_config  JSONB, -- Guardamos aquí lo que se intentó para no perder el dato al borrar la pendiente
-    request_id     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    occurred_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    request_id     BIGINT
 );
 
 -- 2.4. TABLA DE ESTADO (Telemetría Efímera)
@@ -139,18 +141,6 @@ CREATE TABLE sensor_state (
     sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
     current_temp   NUMERIC(5, 2),
     last_update    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2.5. TABLA DE ERRORES (Persistencia de fallos)
--- Si el controlador falla, lo registra aquí. 
--- El Servidor puede limpiar esta tabla cuando el usuario "reintenta" o "descarta" el error.
-CREATE TABLE sensor_config_errors (
-    error_id       SERIAL PRIMARY KEY,
-    sensor_id      INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
-    error_code     VARCHAR(50), 
-    error_detail   TEXT,
-    failed_config  JSONB, -- Guardamos aquí lo que se intentó para no perder el dato al borrar la pendiente
-    occurred_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ==========================================================
@@ -342,9 +332,9 @@ SELECT
         WHEN p.new_ip_address IS NOT NULL THEN c.ip_address::text || ' -> ' || p.new_ip_address::text
         ELSE c.ip_address::text 
     END AS "IP (Actual -> Nueva)",
-    
+
     COALESCE(s.current_temp::text, 'N/A') AS "Temp (ºC)",
-    
+
     -- Estado de la comunicación
     CASE 
         WHEN p.sensor_id IS NOT NULL THEN '⏳ PENDIENTE'

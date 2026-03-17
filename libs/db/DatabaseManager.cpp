@@ -38,12 +38,10 @@ void DatabaseManager::connect()
     try
     {
         connection_listener_ = std::make_unique<pqxx::connection>(conn_str_);
-        if (connection_listener_->is_open()) {
-            std::cout << "Connected to: " << connection_listener_->dbname() << std::endl;
-        }
         connection_queries_ = std::make_unique<pqxx::connection>(conn_str_);
-        if (connection_queries_->is_open()) {
-            std::cout << "Connected to: " << connection_queries_->dbname() << std::endl;
+
+        if (connection_listener_->is_open() && connection_queries_->is_open()) {
+            std::cout << "[DB] Database connection name: " << connection_listener_->dbname() << std::endl;
         }
     }
     catch (const std::exception& e)
@@ -53,7 +51,7 @@ void DatabaseManager::connect()
     }
 }
 
-void DatabaseManager::disconnect() 
+void DatabaseManager::disconnect()
 {
     // Bloquea hasta que termine la función, asegurando que no haya operaciones concurrentes usando connection_listener_.
     std::lock_guard<std::mutex> lock(conn_mutex_); 
@@ -107,11 +105,17 @@ void DatabaseManager::upsert_sensor_state(int sensor_id, double temp)
         );
 
         txn.commit();
-        // Trace for debugging
-        // std::cout << "[DB] Telemetry updated for Sensor " << sensor_id << std::endl;
+        std::cout << "[DB] Telemetry updated for Sensor " << sensor_id << std::endl;
     }
-    catch (const std::exception& e) {
-        std::cerr << "[DB-Error] Telemetry Upsert Failed: " << e.what() << std::endl;
+    catch (const pqxx::broken_connection& e)
+    {
+        std::cerr << "[DB] FATAL: Connection lost (Server terminated session). " << e.what() << std::endl;
+        // Do NOT try to call connection_listener_->... here.
+        // Reset your local flags so the jthread exits cleanly.
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[DB-Error] " << e.what() << std::endl;
         throw;
     }
 }
@@ -119,7 +123,8 @@ void DatabaseManager::upsert_sensor_state(int sensor_id, double temp)
 void DatabaseManager::add_pending_config(int sensor_id, 
                                          const std::string& hostname, 
                                          const std::string& ip, 
-                                         bool is_active)
+                                         bool is_active,
+                                         u_int64_t request_id)
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
@@ -137,14 +142,15 @@ void DatabaseManager::add_pending_config(int sensor_id,
         // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
         txn.exec(
             "INSERT INTO sensor_config_pending "
-                "(sensor_id, new_hostname, new_ip_address, new_is_active) "
-                "VALUES ($1, $2, $3, $4) "
+                "(sensor_id, new_hostname, new_ip_address, new_is_active, request_id) "
+                "VALUES ($1, $2, $3, $4, $5) "
                 "ON CONFLICT (sensor_id) DO UPDATE SET "
                 "new_hostname = EXCLUDED.new_hostname, "
                 "new_ip_address = EXCLUDED.new_ip_address, "
                 "new_is_active = EXCLUDED.new_is_active, "
-                "requested_at = NOW();", // Opcional: actualizar el timestamp
-            pqxx::params{sensor_id, hostname, ip, is_active}
+                "request_id = EXCLUDED.request_id, " // Sincroniza el ID de la app
+                "requested_at = NOW();", 
+            pqxx::params{sensor_id, hostname, ip, is_active, request_id}
         );
         txn.commit();
     }
@@ -202,65 +208,55 @@ boost::json::object DatabaseManager::get_sanity_info()
     }
 }
 
-void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::object& msg)
-{
-    msg["channel"] = n.channel.c_str();
-    try
-    {
-        // Parse the stringified payload into #include <sys/epoll.h>a JSON value
-        msg["payload"] = boost::json::parse(n.payload.c_str());
-    }
-    catch (const std::exception& e)
-    {
-        // Fallback: if it's not valid JSON, store it as a raw string
-        msg["payload"] = n.payload.c_str();
-    }
-}
-
 void DatabaseManager::register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) 
 {
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    std::cout << "[DB-Listener] Initialize listen event from channel: " << channel << std::endl;
+
     try 
     {
-        // 1. Setup the LISTEN command
-        {
-            std::lock_guard<std::mutex> lock(conn_mutex_);
+        if (!connection_listener_ || !connection_listener_->is_open()) {
+            throw std::runtime_error("Database connection is not established.");
+        }
+        std::cout << "[DB-Listener] Listen query: " << channel << std::endl;
 
-            if (!connection_listener_ || !connection_listener_->is_open()) {
-                throw std::runtime_error("Database connection is not established.");
+        pqxx::nontransaction nt(*connection_listener_);
+
+        std::cout << "[DB-Listener] Listen nontransaction commit: " << channel << std::endl;
+        // Use quote_name to avoid syntax errors with channel names
+        nt.exec("LISTEN " + nt.quote_name(channel));
+
+        // nt is destroyed here when the scope ends, 
+        // ensuring no transaction is active for the next step.
+        std::cout << "[DB-Listener] Listen query commit: " << channel << std::endl;
+        nt.commit();
+
+        // 1. Register the high-level handler in our map
+        callbacks_[channel] = std::move(callback);
+
+        // 2. Use the dedicated listener connection to register the low-level SQL LISTEN
+        // The lambda here acts as the "bridge" between raw pqxx and your JSON logic
+        std::cout << "[DB-Listener] Listen query lambda: " << channel << std::endl;
+
+        connection_listener_->listen(channel, [channel, this](const pqxx::notification& n) {
+            std::function<void(boost::json::object)> handler;
+
+            std::cout << "[DB-Listener] Received listen event from channel: " << channel << std::endl;
+
+            if (callbacks_.contains(channel))
+            {
+                handler = callbacks_[channel];
             }
 
-            pqxx::nontransaction nt(*connection_listener_);
-            // Use quote_name to avoid syntax errors with channel names
-            nt.exec("LISTEN " + nt.quote_name(channel));
-
-            // nt is destroyed here when the scope ends, 
-            // ensuring no transaction is active for the next step.
-            nt.commit();
-
-            // 1. Register the high-level handler in our map
-            callbacks_[channel] = std::move(callback);
-
-            // 2. Use the dedicated listener connection to register the low-level SQL LISTEN
-            // The lambda here acts as the "bridge" between raw pqxx and your JSON logic
-            connection_listener_->listen(channel, [channel, this](const pqxx::notification& n) {
-                std::function<void(boost::json::object)> handler;
-
-                std::cout << "Channel!" << channel << std::endl;
-                if (callbacks_.contains(channel))
-                {
-                    handler = callbacks_[channel];
-                }
-
-                // Process and dispatch
-                if (handler)
-                {
-                    boost::json::object msg;
-                    parser_notify(n, msg); // Your custom parser
-                    handler(std::move(msg));
-                }
-            });
-            if (!listener_thread_) run_listener_loop();
-        }
+            // Process and dispatch
+            if (handler)
+            {
+                boost::json::object msg;
+                parser_notify(n, msg); // Your custom parser
+                handler(std::move(msg));
+            }
+        });
     }
     catch (const pqxx::broken_connection& e) {
         /*  
@@ -277,18 +273,18 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
             */
         std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
     }
+    std::cout << "[DB-Listener] Finalize listen event from channel: " << channel << std::endl;
 }
 
 void DatabaseManager::run_listener_loop()
 {
+    if (listener_thread_) return;
+
     listener_thread_ = std::make_unique<std::jthread>([this](std::stop_token st) {
         try 
         {
             for (;;)
             {
-                // Data available: let libpqxx process it
-                // If the connection is broken, this will throw pqxx::broken_connection
-                std::cout << "Waiting for notification..." << std::endl;
                 /*
                     Hacking note: libpqxx's wait_notification() is designed to be
                     efficient and will internally use select() or poll() on the PostgreSQL socket.
@@ -323,5 +319,20 @@ void DatabaseManager::join()
 {
     if (listener_thread_->joinable()) {
         listener_thread_->join();
+    }
+}
+
+void DatabaseManager::parser_notify(const pqxx::notification& n, boost::json::object& msg)
+{
+    msg["channel"] = n.channel.c_str();
+    try
+    {
+        // Parse the stringified payload into #include <sys/epoll.h>a JSON value
+        msg["payload"] = boost::json::parse(n.payload.c_str());
+    }
+    catch (const std::exception& e)
+    {
+        // Fallback: if it's not valid JSON, store it as a raw string
+        msg["payload"] = n.payload.c_str();
     }
 }

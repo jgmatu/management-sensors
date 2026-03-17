@@ -64,6 +64,11 @@ public:
 
     ResponseStatus wait_for_response(uint64_t id, int timeout_ms)
     {
+        // Nota de seguridad: Es seguro usar la pila del hilo (stack) para 'ctx' porque su 
+        // tiempo de vida está ligado al hilo que espera. Dado que el hilo que despierta 
+        // (notify) siempre accede a esta referencia mientras el hilo de espera está 
+        // bloqueado en el 'cv.wait_for', y la entrada se elimina del mapa antes de salir 
+        // de este ámbito, no hay riesgo de acceso a memoria liberada.
         RequestContext ctx;
         std::unique_lock<std::mutex> lock(map_mtx);
         if (pending_requests.size() >= MAX_PENDING) return ResponseStatus::SYSTEM_FULL;
@@ -130,7 +135,7 @@ int main()
     std::vector<uint64_t> ids;
 
     // 1. Create N waiter threads
-    for (int i = 1; i <= N; ++i)
+    for (int i = 0; i < N; ++i)
     {
         uint64_t id = dispatcher.generate_id();
         ids.push_back(id);
@@ -152,7 +157,7 @@ int main()
             }
             // Odd IDs are never dispatched, so they will eventually timeout
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(900));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         std::cout << "[Main] Starting selective dispatch...\n";
     }
 

@@ -28,6 +28,7 @@ find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 add_executable(${PROJECT_NAME}
     src/oscp/ocsp_cache.cpp
     src/json/JsonUtils.cpp
+    src/dispatcher/Dispatcher.cpp
     src/net/QuantumSafeTlsEngine.cpp
     src/main.cpp
 )

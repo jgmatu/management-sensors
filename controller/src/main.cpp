@@ -88,6 +88,7 @@ int main()
 
         g_db->connect();
         g_db->register_listen_async("config_requested", on_db_event_received);
+        g_db->run_listener_loop();
     }
     catch(const std::exception& e)
     {

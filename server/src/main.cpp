@@ -17,14 +17,19 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <map>
 
 #include <db/DatabaseManager.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
+#include <dispatcher/Dispatcher.hpp>
+
+#define REQUEST_TIMEOUT_MS 2 * 1000
 
 // Global pointer to the Database Manager
 // Shared across the TLS Engine threads and the Main thread
 std::shared_ptr<DatabaseManager> g_db;
+Dispatcher g_dispatcher;
 
 struct SensorCommand {
     std::string cmd;
@@ -32,6 +37,42 @@ struct SensorCommand {
     std::string attr;
     std::string value;
     bool valid = false;
+};
+
+// Helper to convert status to human-readable string
+std::string status_to_string(ResponseStatus status) {
+    switch (status) {
+        case ResponseStatus::SUCCESS:      return "SUCCESS";
+        case ResponseStatus::TIMEOUT:      return "ERROR: Request Timed Out";
+        case ResponseStatus::DB_ERROR:     return "ERROR: Database Failure";
+        case ResponseStatus::SYSTEM_FULL:  return "ERROR: Maximum Pending Requests Reached";
+        case ResponseStatus::PENDING:      return "PENDING";
+        default:                           return "UNKNOWN_ERROR";
+    }
+}
+
+const std::map<std::string, std::function<std::string(const SensorCommand&)>> command_registry = {
+    {"CONFIG_IP", [](const SensorCommand& sc) -> std::string {
+        // 1. Generate unique uint64_t ID
+        uint64_t request_id = g_dispatcher.generate_id();
+
+        std::cout << "Request ID: " << request_id << std::endl;
+        // 2. Persist to DB (using the INSERT we updated earlier)
+        // hostname: "sensor-X", ip: sc.value, active: true
+        g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true, request_id);
+
+        // 3. Wait for the Controller to ACK via the map/condition_variable
+        auto status = g_dispatcher.wait_for_response(request_id, REQUEST_TIMEOUT_MS);
+
+        if (status == ResponseStatus::SUCCESS) {
+            return "OK: Sensor " + std::to_string(sc.id) + " updated successfully.";
+        }
+        return "ERROR: " + status_to_string(status) + " (ID: " + std::to_string(request_id) + ")";
+    }},
+    {"REBOOT", [](const SensorCommand& sc) -> std::string {
+        // Example of adding another command easily
+        return "OK: Rebooting sensor " + std::to_string(sc.id);
+    }}
 };
 
 /**
@@ -86,7 +127,7 @@ SensorCommand parse_sensor_command(const std::string& request) {
  * Useful for debugging race conditions or malformed CLI inputs.
  */
 std::ostream& operator<<(std::ostream& os, const SensorCommand& sc) {
-    os << "[SensorCommand] " 
+    os << "[SensorCommand] " << "\n"
        << (sc.valid ? "VALID" : "INVALID") << "\n"
        << "  Command: " << (sc.cmd.empty() ? "N/A" : sc.cmd) << "\n"
        << "  ID:      " << sc.id << "\n"
@@ -123,31 +164,20 @@ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     const std::string request(input.begin(), input.end());
     const SensorCommand sc = parse_sensor_command(request);
     std::string response;
+    u_int64_t request_id = 0;
 
     std::cout << sc << std::endl;
 
-    // 1. Validation Logic
-    if (!sc.valid || sc.cmd != "CONFIG_SENSOR")
+    // Look up the 'cmd' field in the map
+    auto it = command_registry.find(sc.cmd);
+
+    if (it != command_registry.end())
     {
-        response = "ERROR: Invalid Syntax. Use: CONFIG_SENSOR <id> IP <address>";
-    }
-    else if (sc.attr != "IP")
-    {
-        response = "ERROR: Unknown attribute '" + sc.attr + "'.";
+        response = it->second(sc); // Execute the lambda passing the whole struct
     }
     else
     {
-        // 2. Execution Logic
-        try
-        {
-            std::cout << "[PQC-Logic] Configured Sensor " << sc.id << " with IP " << sc.value << std::endl;
-            g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true);
-            response = "OK: Sensor " + std::to_string(sc.id) + " updated.";
-        } 
-        catch (const std::exception& e)
-        {
-            response = "ERROR: DB Failure - " + std::string(e.what());
-        }
+        response = "Command '" + sc.cmd + "' not found in registry.";
     }
 
     return std::vector<uint8_t>(response.begin(), response.end());
@@ -186,6 +216,30 @@ void on_db_state_event_received(boost::json::object msg)
     if (msg.empty()) return;
 
     std::cout << "************ STATE TELEMETRY EVENT! *************" << std::endl;
+
+    // 1. Extract the channel for logging
+    std::string_view channel = msg.at("channel").as_string();
+    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
+
+    // 2. Use your existing JsonUtils to print the payload
+    JsonUtils::print(std::cout, msg);
+    std::cout << std::endl;
+
+    // 3. Example Logic: If it's an 'alarm' type, log it specifically
+    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
+        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
+    }
+}
+
+/**
+ * @brief Logic handler for Database NOTIFY events.
+ * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ */
+void on_db_error_event_received(boost::json::object msg)
+{
+    if (msg.empty()) return;
+
+    std::cout << "************ ERROR DATABASE EVENT! *************" << std::endl;
 
     // 1. Extract the channel for logging
     std::string_view channel = msg.at("channel").as_string();
@@ -253,7 +307,7 @@ int main(int argc, char* argv[])
         // Initialize the global shared_ptr
         g_db = std::make_shared<DatabaseManager>(conn_str);
         g_db->connect();
-        std::cout << "[DB] Connection established with Keep-Alive (60s/5s/3)." << std::endl;
+        std::cout << "[MAIN] Connection established with Keep-Alive (60s/5s/3)." << std::endl;
 
         const auto port = vm["port"].as<uint16_t>();
         const auto policy = vm["policy"].as<std::string>();
@@ -271,57 +325,16 @@ int main(int argc, char* argv[])
         JsonUtils::print(std::cout, sanity_info);
         std::cout << std::endl;
 
-        std::cout << "Starting async listener for PostgreSQL notifications..." << std::endl;
+        std::cout << "[MAIN] Starting async listener for PostgreSQL notifications..." << std::endl;
 
-        /**
-         * @bug DEADLOCK / RACE CONDITION:
-         * The `txn.commit()` in `add_pending_config` hangs when the `DatabaseManager` 
-         * listener thread is blocked in `wait_notification()`.
-         * 
-         * ROOT CAUSE ANALYSIS: 
-         * Potential shared-lock contention on the PostgreSQL socket. While the 
-         * listener is waiting for server-side events, it may be holding an implicit 
-         * transaction state that prevents the UPSERT (INSERT ... ON CONFLICT) from 
-         * finalizing its commit.
-         * 
-         * VERIFICATION:
-         * - External sanity scripts (independent DML) succeed, confirming the DB 
-         *   schema and triggers are healthy.
-         * - The issue is localized to the internal thread orchestration of this class.
-         * 
-         * TODO: Isolate the listener into a `pqxx::nontransaction` or a dedicated 
-         * connection to prevent cross-thread blocking during DML commits.
-         */
-        /**
-         * @fix RESOLVED - ARCHITECTURAL LOCK CONTENTION:
-         * Se ha corregido el Deadlock/Race Condition que bloqueaba el `txn.commit()` 
-         * en `add_pending_config`.
-         * 
-         * SOLUCIÓN TÉCNICA: 
-         * Implementación de arquitectura de **Doble Conexión Física**. 
-         * No es posible (ni seguro) compartir un único socket de PostgreSQL/libpq 
-         * para operaciones DML (INSERT/UPDATE) y escucha de eventos (LISTEN/NOTIFY) 
-         * de forma simultánea.
-         * 
-         * CAUSA RAÍZ:
-         * Mientras el hilo del Listener está bloqueado en `wait_notification()`, el 
-         * socket queda en estado "Busy" a nivel de protocolo de red de Postgres. 
-         * Cualquier intento de `COMMIT` desde otro hilo por el mismo socket resultaba 
-         * en un bloqueo indefinido o un `unexpected EOF` al intentar reentrar en 
-         * una sesión ocupada.
-         * 
-         * NUEVA ESTRUCTURA:
-         * 1. `connection_queries_`: Socket dedicado exclusivamente a transacciones de escritura/lectura o consulta.
-         * 2. `connection_listener_`: Socket persistente dedicado al bucle de eventos.
-         * 
-         * RESULTADO:
-         * El pipeline de sanidad y telemetría funciona ahora de forma asíncrona y 
-         * paralela sin colisiones de bloqueos (locks) ni corrupción del flujo de red.
-         */
         g_db->register_listen_async("config_events", on_db_config_event_received);
+        g_db->register_listen_async("config_errors", on_db_error_event_received);
         g_db->register_listen_async("state_events", on_db_state_event_received);
+        g_db->run_listener_loop();
 
         // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
+        std::cout << "[MAIN] WAIT UNTIL SERVER IO FINALIZE" << std::endl;
+
         server.join();
         server.stop();
 

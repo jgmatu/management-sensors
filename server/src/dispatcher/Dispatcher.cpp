@@ -6,7 +6,6 @@ struct Dispatcher::RequestContext {
     std::chrono::steady_clock::time_point start_time;
     ResponseStatus status = ResponseStatus::PENDING;
     bool ready = false;
-    std::chrono::steady_clock::time_point ts;
 };
 
 Dispatcher::Dispatcher() :
@@ -17,13 +16,16 @@ Dispatcher::~Dispatcher() {}
 
 uint64_t Dispatcher::generate_id()
 {
-    // fetch_add returns the value BEFORE the increment.
-    // If id was UINT64_MAX, it becomes 0 automatically.
     return id_counter.fetch_add(1, std::memory_order_relaxed);
 }
 
 ResponseStatus Dispatcher::wait_for_response(uint64_t id, int timeout_ms)
 {
+    // Nota de seguridad: Es seguro usar la pila del hilo (stack) para 'ctx' porque su 
+    // tiempo de vida está ligado al hilo que espera. Dado que el hilo que despierta 
+    // (notify) siempre accede a esta referencia mientras el hilo de espera está 
+    // bloqueado en el 'cv.wait_for', y la entrada se elimina del mapa antes de salir 
+    // de este ámbito, no hay riesgo de acceso a memoria liberada.
     RequestContext ctx;
     std::unique_lock<std::mutex> lock(map_mtx);
 
@@ -33,14 +35,11 @@ ResponseStatus Dispatcher::wait_for_response(uint64_t id, int timeout_ms)
         return ResponseStatus::SYSTEM_FULL;
     }
 
-    std::cout << "Wait for pending request..." << std::endl;
     pending_requests[id] = &ctx;
     bool triggered = ctx.cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&] { return ctx.ready; });
 
     ResponseStatus final_status = triggered ? ctx.status : ResponseStatus::TIMEOUT;
     pending_requests.erase(id);
-
-    std::cout << "Final request response..." << std::endl;
 
     return final_status;
 }

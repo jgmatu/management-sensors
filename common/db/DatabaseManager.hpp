@@ -32,6 +32,7 @@ public:
     void parser_notify(const pqxx::notification& n, boost::json::object& msg);
 
     void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
+    void run_listener_loop();
 
     void join();
 
@@ -43,7 +44,8 @@ public:
      * @param ip New IP address (v4 or v6).
      * @param is_active Desired operational state.
      */
-    void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip, bool is_active);
+    void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip,
+        bool is_active, u_int64_t request_id);
 
     /**
      * @brief Performs an atomic UPSERT of the sensor's real-time telemetry data.
@@ -64,8 +66,6 @@ public:
     void upsert_sensor_state(int sensor_id, double temp);
 
 private:
-
-    void run_listener_loop();
 
     std::string conn_str_;
     std::unique_ptr<std::jthread> listener_thread_;
