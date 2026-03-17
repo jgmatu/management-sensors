@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Directorio raíz del repo (un nivel por encima de scripts/)
+# Directorio raíz del repo
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "==[ Tests ]========================================"
 echo "Root:   ${ROOT_DIR}"
-echo "Source: ${ROOT_DIR}/tests"
-echo "Build:  ${ROOT_DIR}/tests/build"
+echo "Build:  ${ROOT_DIR}/build"
 echo "==================================================="
 echo
 
-cmake -S "${ROOT_DIR}/tests" -B "${ROOT_DIR}/tests/build"
-cmake --build "${ROOT_DIR}/tests/build"
+# 1) Configurar y compilar TODO el proyecto (incluye tests)
+cmake -S "${ROOT_DIR}" -B "${ROOT_DIR}/build"
+cmake --build "${ROOT_DIR}/build"
 
 echo
-echo "==[ Running tests ]==============================="
+echo "==[ Running all CTest suites ]====================="
 ctest \
-  --test-dir "${ROOT_DIR}/tests/build" \
-  --output-on-failure \
-  -VV
+  --test-dir "${ROOT_DIR}/build" \
+  --output-on-failure
 echo "==================================================="

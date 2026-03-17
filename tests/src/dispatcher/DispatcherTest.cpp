@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
-#include "dispatcher/Dispatcher.hpp"
 #include <thread>
 #include <chrono>
+
+#include <dispatcher/Dispatcher.hpp>
+#include "../TestUtils.hpp"
+
 // Helper: convert ResponseStatus to string for ASSERT messages
 static const char* status_to_cstr(ResponseStatus s)
 {
@@ -43,6 +46,7 @@ TEST(DispatcherTest, WaitForResponseTimesOutWhenNoDispatch)
 
 TEST(DispatcherTest, WaitForResponseIsWokenByDispatchSuccess)
 {
+
     Dispatcher d;
     uint64_t id = d.generate_id();
     std::thread worker([&](){

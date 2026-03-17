@@ -1,0 +1,129 @@
+#include <gtest/gtest.h>
+#include <db/DatabaseManager.hpp>
+#include <cstdlib>
+#include <string>
+
+namespace {
+
+std::string get_test_conn_str()
+{
+    // Permite sobreescribir la conexión vía entorno: DB_TEST_CONN_STR
+    if (const char* env = std::getenv("DB_TEST_CONN_STR")) {
+        return std::string(env);
+    }
+
+    // Fallback: ajusta estos valores a tu entorno de Postgres de pruebas
+    return
+        "dbname=javi "
+        "user=javi "
+        "password=12345678 "
+        "host=localhost "
+        "port=5432 ";
+}
+
+} // namespace
+
+TEST(DatabaseManagerTest, ConnectAndDisconnect)
+{
+    const std::string conn_str = get_test_conn_str();
+    DatabaseManager db(conn_str);
+
+    try {
+        db.connect();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
+    }
+
+    // Si llegamos aquí, la conexión fue exitosa
+    EXPECT_NO_THROW(db.disconnect());
+}
+
+TEST(DatabaseManagerTest, GetSanityInfoHasBasicFields)
+{
+    const std::string conn_str = get_test_conn_str();
+    DatabaseManager db(conn_str);
+
+    try {
+        db.connect();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
+    }
+
+    auto info = db.get_sanity_info();
+
+    // Los nombres concretos pueden variar, pero estos vienen de tu implementación
+    EXPECT_TRUE(info.if_contains("postgres_version")) << "missing postgres_version";
+    EXPECT_TRUE(info.if_contains("db_uptime"))        << "missing db_uptime";
+    EXPECT_TRUE(info.if_contains("backend_pid"))      << "missing backend_pid";
+    EXPECT_TRUE(info.if_contains("pqxx_version"))     << "missing pqxx_version";
+
+    db.disconnect();
+}
+
+TEST(DatabaseManagerTest, ListenerReceivesNotifyEvent)
+{
+    const std::string conn_str = get_test_conn_str();
+    DatabaseManager db(conn_str);
+    try {
+        db.connect();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
+    }
+    const std::string channel = "test_events";
+    std::mutex m;
+    std::condition_variable cv;
+    std::atomic<bool> received{false};
+    boost::json::object last_msg;
+    // Registrar el listener antes de arrancar el loop
+    db.register_listen_async(channel, [&](boost::json::object msg) {
+        {
+            std::lock_guard<std::mutex> lock(m);
+            last_msg = msg;
+            received.store(true, std::memory_order_relaxed);
+        }
+        cv.notify_one();
+    });
+
+    // Arrancar el hilo de escucha interno
+    db.run_listener_loop();
+
+    // Desde otra conexión, enviar un NOTIFY al canal
+    std::thread notifier([&] {
+        try {
+            pqxx::connection conn(conn_str);
+            pqxx::work txn(conn);
+            // Payload JSON sencillo
+            auto res = txn.exec(
+                "NOTIFY " + txn.quote_name(channel) +
+                ", '{\"key\":\"value\"}'"
+            );
+            txn.commit();
+        } catch (const std::exception& e) {
+            // Si falla el NOTIFY, dejamos que el test falle por timeout
+            std::cerr << "[Test-Notifier] " << e.what() << std::endl;
+        }
+    });
+
+    // Esperar a que el callback marque "received"
+    {
+        std::unique_lock<std::mutex> lock(m);
+        cv.wait_for(lock, std::chrono::seconds(2), [&] {
+            return received.load(std::memory_order_relaxed);
+        });
+    }
+    notifier.join();
+
+
+    db.disconnect();
+    db.join();
+
+    ASSERT_TRUE(received.load(std::memory_order_relaxed))
+        << "Listener did not receive NOTIFY on channel '" << channel << "'";
+    // Comprobar contenido básico del mensaje
+    ASSERT_TRUE(last_msg.if_contains("channel"));
+    EXPECT_EQ(last_msg.at("channel").as_string(), channel);
+    ASSERT_TRUE(last_msg.if_contains("payload"));
+    auto& payload = last_msg.at("payload").as_object();
+    ASSERT_TRUE(payload.if_contains("key"));
+    EXPECT_EQ(payload.at("key").as_string(), "value");
+}
