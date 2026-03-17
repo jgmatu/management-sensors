@@ -61,8 +61,15 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
         // hostname: "sensor-X", ip: sc.value, active: true
         g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true, request_id);
 
-        // 3. Wait for the Controller to ACK via the map/condition_variable
+        // --- FASE DE ESPAERA: SINCRONIZACIÓN DE PETICIÓN CLI ---
+        // Se inicia el bloqueo del hilo actual (CLI) para esperar la confirmación 
+        // asíncrona (MQTT/DB-Notify) mediante el request_id generado.
+        std::cout << "[DEBUG] CLI Thread: Waiting for response [ReqID: " << request_id  << "] (Timeout: " << REQUEST_TIMEOUT_MS << "ms)..." << std::endl;
         auto status = g_dispatcher.wait_for_response(request_id, REQUEST_TIMEOUT_MS);
+
+        // --- FASE DE ACTIVACIÓN: RESPUESTA RECIBIDA ---
+        // El hilo ha sido despertado. Procedemos a registrar el resultado en los logs.
+        std::cout << "[DEBUG] CLI Thread: Awake! [ReqID: " << request_id  << "] | Final Status: " << status_to_string(status) << std::endl;
 
         if (status == ResponseStatus::SUCCESS) {
             return "OK: Sensor " + std::to_string(sc.id) + " updated successfully.";
@@ -225,7 +232,7 @@ void on_db_config_event_received(boost::json::object msg)
             // Despierta el hilo que originó la petición desde la línea de comandos (CLI).
             // Se notifica el estatus (SUCCESS) para liberar el bloqueo 'wait_for_response'
             // y permitir que el usuario reciba la confirmación del cambio en tiempo real.
-            std::cout << "[DEBUG] Dispatching SUCCESS for Request ID: " << request_id << " | Waking up CLI thread..." << std::endl;
+            std::cout << "[MAIN] Dispatching SUCCESS for Request ID: " << request_id << std::endl;
             g_dispatcher.dispatch(request_id, ResponseStatus::SUCCESS);
         }
         catch (const std::exception& e)

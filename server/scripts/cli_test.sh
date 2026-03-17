@@ -41,8 +41,8 @@ send_and_wait() {
 }
 
 # --- TEST COMMANDS ---
-send_and_wait "CONFIG_IP 1 IP 192.168.1.50"
-send_and_wait "CONFIG_IP 2 IP 10.0.0.99"
+send_and_wait "CONFIG_IP 1 IP 7.7.7.7/22";
+send_and_wait "CONFIG_IP 2 IP 0.0.0.0/24";
 
 # Cleanly close
 echo "quit" >&"${BOTAN[1]}"
