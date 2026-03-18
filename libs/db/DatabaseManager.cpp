@@ -62,14 +62,14 @@ void DatabaseManager::disconnect()
         {
             // Opcional: Notificar el cierre
             std::cout << "Disconnecting from: " << connection_listener_->dbname() << std::endl;
-            
+
             connection_listener_->close(); // Cierra la conexión física
         }
         if (connection_queries_ && connection_queries_->is_open()) 
         {
             // Opcional: Notificar el cierre
             std::cout << "Disconnecting from: " << connection_queries_->dbname() << std::endl;
-            
+
             connection_queries_->close(); // Cierra la conexión física
         }
     }

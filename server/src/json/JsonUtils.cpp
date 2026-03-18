@@ -1,4 +1,5 @@
 #include <json/JsonUtils.hpp>
+#include <sstream>
 
 void JsonUtils::print(std::ostream& os, boost::json::value const& jv, std::string indent)
 {

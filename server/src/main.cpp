@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <filesystem>
+
 
 #include <db/DatabaseManager.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
@@ -143,12 +143,12 @@ void on_db_config_event_received(boost::json::object msg)
             // Extract string fields using value_to for type safety.
             std::string action   = boost::json::value_to<std::string>(payload.at("action"));
             std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
-            std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
+            std::string ip_address   = boost::json::value_to<std::string>(payload.at("ip_address"));
 
             // Trace important fields for observability.
             std::cout << "[CONFIG-EVENT] Received Request ID: " << request_id << std::endl;
             std::cout << " > Action: " << action << " | Sensor: " << sensor_id << std::endl;
-            std::cout << " > New IP: " << new_ip << " | Hostname: " << hostname << std::endl;
+            std::cout << " > New IP: " << ip_address << " | Hostname: " << hostname << std::endl;
 
             // Signal completion of the configuration request to the waiting
             // CLI thread that originated this request_id.
@@ -252,6 +252,18 @@ int main(int argc, char* argv[])
     // ... Initialize and start your QuantumSafeTlsEngine ...
     try
     {
+        const auto port = vm["port"].as<uint16_t>();
+        const auto policy = vm["policy"].as<std::string>();
+        const auto certificate = vm["cert"].as<std::string>();
+        const auto key = vm["key"].as<std::string>();
+        const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
+        const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
+        QuantumSafeTlsEngine server(port, certificate, key, policy,
+            ocsp_cache_time,ocsp_request_timeout);
+
+        server.set_processor(on_tls_message_process);
+        server.initialize();
+
         // Build the connection string with TCP Keep-Alive parameters
         std::string conn_str = 
             "dbname=javi "
@@ -264,45 +276,19 @@ int main(int argc, char* argv[])
             "keepalives_interval=5 " // 5s between probes
             "keepalives_count=3";    // Drop after 3 failed probes
 
-        // Initialize the global shared_ptr
         g_db = std::make_shared<DatabaseManager>(conn_str);
         g_db->connect();
-        std::cout << "[MAIN] Connection established with Keep-Alive (60s/5s/3)." << std::endl;
-
-        const auto port = vm["port"].as<uint16_t>();
-        const auto policy = vm["policy"].as<std::string>();
-        const auto certificate = vm["cert"].as<std::string>();
-        const auto key = vm["key"].as<std::string>();
-        const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
-        const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
-        QuantumSafeTlsEngine server(port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
-
-        server.set_processor(on_tls_message_process);
-
-        server.initialize();
+        g_db->register_listen_async("config_requested", on_db_config_event_received);
+        g_db->register_listen_async("state_events", on_db_state_event_received);
+        g_db->register_listen_async("error_events", on_db_error_event_received);
+        g_db->run_listener_loop();
 
         boost::json::object sanity_info = g_db->get_sanity_info();
         logging::Logger::instance().info("server", JsonUtils::toString(sanity_info));
 
-        std::cout << "[MAIN] Starting async listener for PostgreSQL notifications..." << std::endl;
-
-        g_db->register_listen_async("config_events", on_db_config_event_received);
-        g_db->register_listen_async("config_errors", on_db_error_event_received);
-        g_db->register_listen_async("state_events", on_db_state_event_received);
-        g_db->run_listener_loop();
-
-        // Esperamos a que el servidor termine (en este caso, se ejecutará indefinidamente hasta recibir una señal de interrupción)
-        std::cout << "[MAIN] WAIT UNTIL SERVER IO FINALIZE" << std::endl;
-
         server.join();
         server.stop();
-
-        if (g_db)
-        {
-            std::cout << "[DB] Liberando conexión global..." << std::endl;
-            g_db.reset(); // El contador de referencias baja a 0 y se cierra la conexión
-        }
-        std::cout << "[System] Thread pool joined and I/O context finalized." << std::endl;
+        g_db->disconnect();
     }
     catch (const std::exception& ex)
     {
