@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <db/DatabaseManager.hpp>
+#include <db/IDatabaseConnection.hpp>
+
+#include <gmock/gmock.h>
 #include <cstdlib>
 #include <string>
 
@@ -22,6 +25,18 @@ std::string get_test_conn_str()
 }
 
 } // namespace
+
+class MockDatabaseConnection : public IDatabaseConnection {
+public:
+    MOCK_METHOD(void, connect, (), (override));
+    MOCK_METHOD(void, disconnect, (), (override));
+    MOCK_METHOD(boost::json::object, get_sanity_info, (), (override));
+    MOCK_METHOD(void, listen_async,
+        (const std::string& channel,
+            std::function<void(boost::json::object)> handler),
+        (override));
+    MOCK_METHOD(void, run_listener_loop, (), (override));
+};
 
 TEST(DatabaseManagerTest, ConnectAndDisconnect)
 {

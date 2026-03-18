@@ -282,8 +282,7 @@ int main(int argc, char* argv[])
         server.initialize();
 
         boost::json::object sanity_info = g_db->get_sanity_info();
-        JsonUtils::print(std::cout, sanity_info);
-        std::cout << std::endl;
+        logging::Logger::instance().info("server", JsonUtils::toString(sanity_info));
 
         std::cout << "[MAIN] Starting async listener for PostgreSQL notifications..." << std::endl;
 
