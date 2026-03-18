@@ -3,7 +3,7 @@
 # Lanza múltiples instancias de cli_test.sh en paralelo.
 
 cd "$(dirname "$0")" || exit 1
-PARALLEL_CLIENTS=${1:-50}   # número de clientes en paralelo, por defecto 50
+PARALLEL_CLIENTS=${1:-1000}   # número de clientes en paralelo, por defecto 50
 LOG_DIR="log"
 mkdir -p "$LOG_DIR"
 pids=()
