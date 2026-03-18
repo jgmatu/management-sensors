@@ -13,12 +13,14 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <filesystem>
 
 #include <db/DatabaseManager.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
 #include <dispatcher/Dispatcher.hpp>
 #include <cli/SensorCommandCli.hpp>
+#include <log/Log.hpp>
 
 #define REQUEST_TIMEOUT_MS 2 * 1000
 
@@ -205,6 +207,8 @@ void on_db_error_event_received(boost::json::object msg)
 
 int main(int argc, char* argv[])
 {
+    logging::Logger::instance().info("server", "Creating logs directory");
+
     // clang-format off
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
@@ -236,6 +240,14 @@ int main(int argc, char* argv[])
         std::cerr << ex.what() << std::endl;
         return 1;
     }
+
+    logging::Logger::instance().info("server", "Port: " + std::to_string(vm["port"].as<uint16_t>()));
+    logging::Logger::instance().info("server", "Policy: " + vm["policy"].as<std::string>());
+    logging::Logger::instance().info("server", "Certificate: " + vm["cert"].as<std::string>());
+    logging::Logger::instance().info("server", "Key: " + vm["key"].as<std::string>());
+    logging::Logger::instance().info("server", "OCSP request timeout: " + std::to_string(vm["ocsp-request-timeout"].as<uint64_t>()));
+    logging::Logger::instance().info("server", "OCSP cache time: " + std::to_string(vm["ocsp-cache-time"].as<uint64_t>()));
+    logging::Logger::instance().info("server", "Document root: " + vm["document-root"].as<std::string>());
 
     // ... Initialize and start your QuantumSafeTlsEngine ...
     try

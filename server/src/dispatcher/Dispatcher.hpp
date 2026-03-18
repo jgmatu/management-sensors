@@ -1,7 +1,5 @@
 #include <unordered_map>
 #include <mutex>
-#include <condition_variable>
-#include <chrono>
 #include <atomic>
 #include <cstdint>
 
@@ -25,6 +23,6 @@ private:
     std::mutex map_mtx;
     std::unordered_map<uint64_t, RequestContext*> pending_requests;
     std::atomic<uint64_t> id_counter{1};
-    const size_t MAX_PENDING = 10000;
+    const size_t MAX_PENDING = 500;
 };
 

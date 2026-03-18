@@ -1,5 +1,7 @@
 #include <dispatcher/Dispatcher.hpp>
 #include <iostream>
+#include <condition_variable>
+#include <chrono>
 
 struct Dispatcher::RequestContext {
     std::condition_variable cv;

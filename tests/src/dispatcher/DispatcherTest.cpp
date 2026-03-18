@@ -94,8 +94,8 @@ TEST(DispatcherTest, ReturnsSystemFullWhenTooManyPending)
     for (int i = 0; i < warmup; ++i) {
         (void)d.generate_id();
     }
-    const int max_pending_approx = 10000;   // valor conocido de MAX_PENDING
-    const int extra = 2000;
+    const int max_pending_approx = 500;   // valor conocido de MAX_PENDING
+    const int extra = 10;
     const int total_waiters = max_pending_approx + extra;
     std::vector<std::thread> waiters;
     waiters.reserve(total_waiters);
@@ -105,7 +105,7 @@ TEST(DispatcherTest, ReturnsSystemFullWhenTooManyPending)
         uint64_t id = d.generate_id();
         waiters.emplace_back([&, id]() {
             // Timeout suficientemente grande para que los hilos "extra" vean el mapa lleno
-            auto status = d.wait_for_response(id, 1000);
+            auto status = d.wait_for_response(id, 500);
             if (status == ResponseStatus::SYSTEM_FULL) {
                 system_full_count.fetch_add(1, std::memory_order_relaxed);
             }
