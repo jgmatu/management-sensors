@@ -42,30 +42,32 @@ std::string status_to_string(ResponseStatus status) {
 
 const std::map<std::string, std::function<std::string(const SensorCommand&)>> command_registry = {
     {"CONFIG_IP", [](const SensorCommand& sc) -> std::string {
-        // Generate a unique correlation ID for this CLI request.
         uint64_t request_id = g_dispatcher.generate_id();
 
-        std::cout << "[CLI] New CONFIG_IP request created"
-                  << " | sensor_id=" << sc.id
-                  << " | request_id=" << request_id
-                  << std::endl;
-        // Persist the pending configuration so the controller can pick it up.
-        // We store: sensor id, hostname "sensor-<id>", requested IP and active flag.
+        logging::Logger::instance().info(
+            "server",
+            "[CLI] New CONFIG_IP request created | sensor_id=" +
+                std::to_string(sc.id) +
+                " | request_id=" + std::to_string(request_id)
+        );
+
         g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true, request_id);
 
-        // Block the CLI thread until the async DB notification for this
-        // request_id arrives (or until the timeout expires).
-        std::cout << "[CLI] Waiting for DB confirmation"
-                  << " | request_id=" << request_id
-                  << " | timeout_ms=" << REQUEST_TIMEOUT_MS
-                  << std::endl;
+        logging::Logger::instance().info(
+            "server",
+            "[CLI] Waiting for DB confirmation | request_id=" +
+                std::to_string(request_id) +
+                " | timeout_ms=" + std::to_string(REQUEST_TIMEOUT_MS)
+        );
+
         auto status = g_dispatcher.wait_for_response(request_id, REQUEST_TIMEOUT_MS);
 
-        // Response received (or timeout). Log final status in a compact form.
-        std::cout << "[CLI] DB wait finished"
-                  << " | request_id=" << request_id
-                  << " | status=" << status_to_string(status)
-                  << std::endl;
+        logging::Logger::instance().info(
+            "server",
+            "[CLI] DB wait finished | request_id=" +
+                std::to_string(request_id) +
+                " | status=" + status_to_string(status)
+        );
 
         if (status == ResponseStatus::SUCCESS) {
             return "OK: Sensor " + std::to_string(sc.id) + " updated successfully.";
@@ -73,7 +75,6 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
         return "ERROR: " + status_to_string(status) + " (ID: " + std::to_string(request_id) + ")";
     }},
     {"REBOOT", [](const SensorCommand& sc) -> std::string {
-        // Example command placeholder – real reboot logic can be plugged in here.
         return "OK: Rebooting sensor " + std::to_string(sc.id);
     }}
 };
@@ -91,21 +92,23 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
     if (input.empty()) return {};
     const std::string request(input.begin(), input.end());
     SensorCommandCli cli(request);
-
     // Señal de salida del cliente de pruebas:
-    // si el parser marca el comando como INVALID y el texto es "quit",
-    // no seguimos procesando ni buscamos en el registry.
     if (!cli.command_.valid && cli.command_.cmd == "quit") {
-        // Opciones:
-        // 1) Cerrar en silencio:
         return {};
-        // 2) O devolver un mensaje de despedida:
-        // static const std::string bye = "BYE";
-        // return std::vector<uint8_t>(bye.begin(), bye.end());
     }
-
     std::string response;
-    std::cout << "[CLI] Command received: " << cli.command_ << std::endl;
+    logging::Logger::instance().info(
+        "server",
+        "[CLI] Command received: " + JsonUtils::toString(
+            boost::json::value{
+                { "cmd",    cli.command_.cmd },
+                { "id",     cli.command_.id },
+                { "attr",   cli.command_.attr },
+                { "value",  cli.command_.value },
+                { "valid",  cli.command_.valid }
+            }
+        )
+    );
     auto it = command_registry.find(cli.command_.cmd);
     if (it != command_registry.end()) {
         response = it->second(cli.command_);
@@ -119,94 +122,114 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
  * @brief Logic handler for Database NOTIFY events.
  * Processes JSON payloads from the PostgreSQL 'state_events' channel.
  */
-void on_db_config_event_received(boost::json::object msg)
-{
-    if (msg.empty()) return;
-
-    std::cout << "************ COMMITTED CONFIG EVENT *************" << std::endl;
-
-    // Log which PostgreSQL channel produced this message.
-    std::string_view channel = msg.at("channel").as_string();
-    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
-
-    // Dump the full JSON payload for debugging/traceability.
-    JsonUtils::print(std::cout, msg);
-    std::cout << std::endl;
-
-    if (msg.contains("payload"))
-    {
-        try
-        {
-            auto const& payload = msg.at("payload").as_object();
-
-            // Compact numeric extraction (int64 covers PostgreSQL integer range).
-            int sensor_id       = static_cast<int>(payload.at("sensor_id").as_int64());
-            uint64_t request_id = static_cast<uint64_t>(payload.at("request_id").as_int64());
-
-            // Extract string fields using value_to for type safety.
-            std::string action   = boost::json::value_to<std::string>(payload.at("action"));
-            std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
-            std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
-
-            // Trace important fields for observability.
-            std::cout << "[CONFIG-EVENT] Received Request ID: " << request_id << std::endl;
-            std::cout << " > Action: " << action << " | Sensor: " << sensor_id << std::endl;
-            std::cout << " > New IP: " << new_ip << " | Hostname: " << hostname << std::endl;
-
-            // Signal completion of the configuration request to the waiting
-            // CLI thread that originated this request_id.
-            std::cout << "[MAIN] Dispatching SUCCESS for Request ID: " << request_id << std::endl;
-            g_dispatcher.dispatch(request_id, ResponseStatus::SUCCESS);
-        }
-        catch (const std::exception& e)
-        {
-            std::cerr << "[JSON-Error] Failed to parse config payload: " << e.what() << std::endl;
-        }
-    }
-}
-
-/**
- * @brief Logic handler for Database NOTIFY events.
- * Processes JSON payloads from the PostgreSQL 'state_events' channel.
- */
-void on_db_state_event_received(boost::json::object msg)
-{
-    if (msg.empty()) return;
-
-    std::cout << "************ STATE TELEMETRY EVENT *************" << std::endl;
-
-    // Log which PostgreSQL channel produced this message.
-    std::string_view channel = msg.at("channel").as_string();
-    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
-
-    // Dump the full JSON payload for debugging/traceability.
-    JsonUtils::print(std::cout, msg);
-    std::cout << std::endl;
-}
+ void on_db_config_event_received(boost::json::object msg)
+ {
+     if (msg.empty()) return;
+ 
+     logging::Logger::instance().info("server", "************ COMMITTED CONFIG EVENT *************");
+ 
+     std::string_view channel = msg.at("channel").as_string();
+     logging::Logger::instance().info(
+         "server",
+         "[DB-Handler] Event on channel: " + std::string(channel)
+     );
+ 
+     logging::Logger::instance().info(
+         "server",
+         "[DB-Handler] Full JSON: " + JsonUtils::toString(msg)
+     );
+ 
+     if (msg.contains("payload"))
+     {
+         try
+         {
+             auto const& payload = msg.at("payload").as_object();
+ 
+             int sensor_id       = static_cast<int>(payload.at("sensor_id").as_int64());
+             uint64_t request_id = static_cast<uint64_t>(payload.at("request_id").as_int64());
+ 
+             std::string action   = boost::json::value_to<std::string>(payload.at("action"));
+             std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
+             std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
+ 
+             logging::Logger::instance().info(
+                 "server",
+                 "[CONFIG-EVENT] Received Request ID: " + std::to_string(request_id)
+             );
+             logging::Logger::instance().info(
+                 "server",
+                 " > Action: " + action +
+                     " | Sensor: " + std::to_string(sensor_id)
+             );
+             logging::Logger::instance().info(
+                 "server",
+                 " > New IP: " + new_ip + " | Hostname: " + hostname
+             );
+ 
+             logging::Logger::instance().info(
+                 "server",
+                 "[MAIN] Dispatching SUCCESS for Request ID: " + std::to_string(request_id)
+             );
+             g_dispatcher.dispatch(request_id, ResponseStatus::SUCCESS);
+         }
+         catch (const std::exception& e)
+         {
+             logging::Logger::instance().error(
+                 "server",
+                 std::string("[JSON-Error] Failed to parse config payload: ") + e.what()
+             );
+         }
+     }
+ }
 
 /**
  * @brief Logic handler for Database NOTIFY events.
  * Processes JSON payloads from the PostgreSQL 'state_events' channel.
  */
-void on_db_error_event_received(boost::json::object msg)
-{
-    if (msg.empty()) return;
-
-    std::cout << "************ ERROR DATABASE EVENT *************" << std::endl;
-
-    // Log which PostgreSQL channel produced this message.
-    std::string_view channel = msg.at("channel").as_string();
-    std::cout << "[DB-Handler] Event on channel: " << channel << std::endl;
-
-    // Dump the full JSON payload for debugging/traceability.
-    JsonUtils::print(std::cout, msg);
-    std::cout << std::endl;
-
-    // Example logic: highlight alarm-type events specially.
-    if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
-        std::cerr << "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!" << std::endl;
-    }
-}
+ void on_db_state_event_received(boost::json::object msg)
+ {
+     if (msg.empty()) return;
+     logging::Logger::instance().info(
+         "server",
+         "************ STATE TELEMETRY EVENT *************"
+     );
+     std::string_view channel = msg.at("channel").as_string();
+     logging::Logger::instance().info(
+         "server",
+         "[DB-Handler] Event on channel: " + std::string(channel)
+     );
+     logging::Logger::instance().info(
+         "server",
+         "[DB-Handler] State JSON: " + JsonUtils::toString(msg)
+     );
+ }
+/**
+ * @brief Logic handler for Database NOTIFY events.
+ * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ */
+ void on_db_error_event_received(boost::json::object msg)
+ {
+     if (msg.empty()) return;
+     logging::Logger::instance().error(
+         "server",
+         "************ ERROR DATABASE EVENT *************"
+     );
+     std::string_view channel = msg.at("channel").as_string();
+     logging::Logger::instance().error(
+         "server",
+         "[DB-Handler] Event on channel: " + std::string(channel)
+     );
+     logging::Logger::instance().error(
+         "server",
+         "[DB-Handler] Error JSON: " + JsonUtils::toString(msg)
+     );
+     if (msg.contains("type") && msg.at("type").as_string() == "alarm") {
+         logging::Logger::instance().error(
+             "server",
+             "!!! SYSTEM ALARM RECEIVED FROM DATABASE !!!"
+         );
+     }
+ }
 
 int main(int argc, char* argv[])
 {
