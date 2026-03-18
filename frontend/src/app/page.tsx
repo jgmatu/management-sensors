@@ -144,9 +144,6 @@ export default function Home() {
               <Button href="/telemetry" color="zinc">
                   Telemetry
               </Button>
-              <Button href="/" outline>
-                  Home
-              </Button>
           </div>
       </main>
     </div>
