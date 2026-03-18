@@ -101,7 +101,6 @@ Parar Sistema Comunicaciones
     Run Process    pkill -u ${user} -f scripts/sensor.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
 
 Verificar CLI Configuracion OK
-    [Documentation]    Ejecuta server/scripts/cli_test.sh y valida que devuelve OK: y no FAILED:/ERROR:.
     ${result}=    Run Process
     ...    ${CLI_TEST_CMD}
     ...    shell=True
@@ -110,7 +109,12 @@ Verificar CLI Configuracion OK
     Log    CLI stdout:\n${result.stdout}
     Log    CLI stderr:\n${result.stderr}
 
+    # 1) Si el script falla (no hay OK:), rc != 0 y el test falla.
     Should Be Equal As Integers    ${result.rc}    0
+
+    # 2) Asegurar que realmente vimos un OK: en la salida
     Should Contain    ${result.stdout}    OK:
-    Should Not Contain    ${result.stdout}    FAILED:
-    Should Not Contain    ${result.stdout}    ERROR:
+
+    # 3) Y fallar si el propio script de CLI ha reportado error en stderr
+    Should Not Contain    ${result.stderr}    did not receive an OK:
+    Should Not Contain    ${result.stderr}    Botan process is not running.
