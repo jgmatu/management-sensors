@@ -288,7 +288,7 @@ int main(int argc, char* argv[])
 
         server.join();
         server.stop();
-        g_db->disconnect();
+        g_db.reset();
     }
     catch (const std::exception& ex)
     {
