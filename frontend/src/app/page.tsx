@@ -135,9 +135,18 @@ export default function Home() {
             </Table>
           </div>
           <div className="flex gap-4 p-8">
-            <Button color="indigo">Edit </Button>
-            <Button color="red">Delete</Button>
-            <Button color="blue">Cancel</Button>
+              <Button href="/errors" color="red">
+                  Errors
+              </Button>
+              <Button href="/configuration" color="blue">
+                  Configuration
+              </Button>
+              <Button href="/telemetry" color="zinc">
+                  Telemetry
+              </Button>
+              <Button href="/" outline>
+                  Home
+              </Button>
           </div>
       </main>
     </div>
