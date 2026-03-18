@@ -67,7 +67,8 @@ private:
         const std::string log_dir = "logs";
         const std::string filename = log_dir + "/" + component + ".log";
         std::filesystem::create_directories(log_dir);
-        auto ofs = std::make_unique<std::ofstream>(filename, std::ios::app);
+        auto ofs = std::make_unique<std::ofstream>(filename, std::ios::trunc);
+
         if (!ofs->is_open()) {
             static std::ofstream null_stream;
             return null_stream;
