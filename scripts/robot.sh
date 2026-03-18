@@ -9,3 +9,7 @@ mkdir -p tests/robot/output
 
 # Ejecutar todas las suites Robot
 robot -d tests/robot/output tests/robot/tests
+
+sleep 1;
+
+bash scripts/kill.sh

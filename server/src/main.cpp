@@ -22,7 +22,7 @@
 #include <cli/SensorCommandCli.hpp>
 #include <log/Log.hpp>
 
-#define REQUEST_TIMEOUT_MS 2 * 1000
+#define REQUEST_TIMEOUT_MS 5 * 1000
 
 // Global database handle shared between TLS engine worker threads and main.
 std::shared_ptr<DatabaseManager> g_db;

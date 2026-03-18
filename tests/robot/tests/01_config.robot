@@ -39,15 +39,14 @@ Primer Test: CLI Devuelve OK
 *** Keywords ***
 Iniciar Sistema Completo
     Log    === INICIO SUITE INTEGRACION ===
-    Matar Procesos Sistema Si Existen
     Iniciar Base De Datos
     Verificar Conexion PostgreSQL
     Iniciar Sistema Comunicaciones
 
 Parar Sistema Completo
     Log    === FIN SUITE INTEGRACION ===
-    Parar Sistema Comunicaciones
-    Parar Base De Datos
+    # Parar Sistema Comunicaciones
+    # Parar Base De Datos
 
 Preparar Caso Integración
     Log    Preparando estado previo al caso de integración (placeholder).
@@ -77,47 +76,23 @@ Verificar Conexion PostgreSQL
     Log    psql stderr: ${result.stderr}
     Should Be Equal As Integers    ${result.rc}    0
 
-Matar Procesos Sistema Si Existen
-    [Documentation]    Mata instancias previas de server.sh, controller.sh, sensor.sh y botan.sh del usuario actual.
-    ${user}=    Get Environment Variable    USER
-    Log    Matando procesos previos para usuario ${user}...
-
-    ${res}=    Run Process    pkill -u ${user} -f scripts/server.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill server.sh rc=${res.rc}
-
-    ${res}=    Run Process    pkill -u ${user} -f scripts/controller.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill controller.sh rc=${res.rc}
-
-    ${res}=    Run Process    pkill -u ${user} -f scripts/sensor.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill sensor.sh rc=${res.rc}
-
-    ${res}=    Run Process    pkill -u ${user} -f tests/scripts/botan.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill botan.sh rc=${res.rc}
 
 Iniciar Sistema Comunicaciones
     Log    Lanzando server, luego botan bridge, luego controller y sensor...
     Start Process    ${SERVER_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Sleep    3s
 
     Start Process    ${BOTAN_BRIDGE_CMD}  shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Esperar Puerto Abierto    ${TELNET_HOST}    ${TELNET_PORT}
-
     Start Process    ${CONTROLLER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
     Start Process    ${SENSOR_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Sleep    3s
+    Esperar Puerto Abierto    ${TELNET_HOST}    ${TELNET_PORT}
 
 Parar Sistema Comunicaciones
-    Log    Parando server, controller, sensor y botan bridge...
-    ${user}=    Get Environment Variable    USER
-
-    Run Process    pkill -u ${user} -f scripts/server.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Run Process    pkill -u ${user} -f scripts/controller.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Run Process    pkill -u ${user} -f scripts/sensor.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-
-    Run Process    pkill -u ${user} -f tests/scripts/botan.sh   shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-
-    # Extra: matar el listener telnet del puente si queda vivo
-    Run Process    pkill -u ${user} -f "TCP-LISTEN:${TELNET_PORT}" shell=True timeout=5s stdout=PIPE stderr=PIPE
+    Log    Parando todo (server/controller/sensor/puente) usando scripts/kill.sh...
+    ${res}=    Run Process
+    ...    bash    -lc    "scripts/kill.sh"
+    ...    shell=True    timeout=30s    stdout=PIPE    stderr=PIPE
+    Log    kill.sh stdout:\n${res.stdout}
+    Log    kill.sh stderr:\n${res.stderr}
 
 Esperar Puerto Abierto
     [Arguments]    ${host}    ${port}    ${retries}=30    ${sleep_s}=1s
@@ -143,7 +118,7 @@ Verificar CLI Configuracion OK
     Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
 
     # Telnet suele trabajar con CRLF; lo dejamos explícito
-    Set Newline    CRLF
+    Set Newline    LF
 
     Read Until Regexp    Handshake complete
 

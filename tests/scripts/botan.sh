@@ -19,7 +19,16 @@ BOTAN_CERTS="${REPO_ROOT}/server/certs/ca.pem"
 BOTAN_BIN="botan"
 
 echo "[1/2] Limpieza previa..."
+
+# 1) matar socat que esté levantando el listener del puerto
 pkill -f "socat TCP-LISTEN:${TCP_PORT}" 2>/dev/null || true
+pkill -f "TCP-LISTEN:${TCP_PORT}" 2>/dev/null || true
+
+# 2) matar por puerto (por si quedó un proceso distinto)
+fuser -k "${TCP_PORT}/tcp" 2>/dev/null || true
+
+# 3) esperar a que desaparezca el socket (evita carrera)
+sleep 0.5
 rm -f "$LOG_FILE" || true
 
 BOTAN_CMD="${BOTAN_BIN} tls_client ${BOTAN_HOST} --port=${BOTAN_PORT} --policy=${BOTAN_POLICY} --trusted-cas=${BOTAN_CERTS}"

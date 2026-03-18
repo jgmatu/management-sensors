@@ -17,10 +17,11 @@ for pid in "${pids[@]}"; do
         fail=1
     fi
 done
+
 if [[ $fail -ne 0 ]]; then
     echo "At least one CLI client failed."
     exit 1
-else
-    echo "All CLI clients finished successfully."
-    exit 0
 fi
+
+echo "All CLI clients finished successfully."
+exit 0
