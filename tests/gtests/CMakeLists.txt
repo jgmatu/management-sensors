@@ -10,12 +10,12 @@ find_package(GTest REQUIRED)
 add_executable(dispatcher_tests
     src/main.cpp
     src/dispatcher/DispatcherTest.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../server/src/dispatcher/Dispatcher.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../server/src/dispatcher/Dispatcher.cpp
 )
 
 target_include_directories(dispatcher_tests
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../server/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../server/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -39,7 +39,7 @@ target_link_libraries(db_tests
 
 target_include_directories(db_tests
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../common
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../common
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
