@@ -1,38 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<robot generator="Robot 7.4.2 (Python 3.12.12 on linux)" generated="2026-03-18T14:58:36.803273" rpa="false" schemaversion="5">
+<robot generator="Robot 7.4.2 (Python 3.12.12 on linux)" generated="2026-03-18T15:23:19.126466" rpa="false" schemaversion="5">
 <suite id="s1" name="Tests" source="/home/javi/OpenSource/botan-tls-testserver/tests/robot/tests">
 <suite id="s1-s1" name="Cli Load" source="/home/javi/OpenSource/botan-tls-testserver/tests/robot/tests/cli_load.robot">
 <test id="s1-s1-t1" name="Hello World" line="5">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:36.823393" level="INFO">Hola mundo desde Robot Framework</msg>
+<msg time="2026-03-18T15:23:19.145657" level="INFO">Hola mundo desde Robot Framework</msg>
 <arg>Hola mundo desde Robot Framework</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:36.823241" elapsed="0.000185"/>
+<status status="PASS" start="2026-03-18T15:23:19.145512" elapsed="0.000179"/>
 </kw>
 <kw name="Should Be Equal" owner="BuiltIn">
 <arg>1</arg>
 <arg>1</arg>
 <doc>Fails if the given objects are unequal.</doc>
-<status status="PASS" start="2026-03-18T14:58:36.823512" elapsed="0.000154"/>
+<status status="PASS" start="2026-03-18T15:23:19.145778" elapsed="0.000154"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:36.822903" elapsed="0.000842"/>
+<status status="PASS" start="2026-03-18T15:23:19.145163" elapsed="0.000851"/>
 </test>
 <doc>Hola mundo Robot Framework</doc>
-<status status="PASS" start="2026-03-18T14:58:36.822340" elapsed="0.001599"/>
+<status status="PASS" start="2026-03-18T15:23:19.144606" elapsed="0.001599"/>
 </suite>
 <suite id="s1-s2" name="Pipeline Db" source="/home/javi/OpenSource/botan-tls-testserver/tests/robot/tests/pipeline_db.robot">
 <kw name="Iniciar Base De Datos" type="SETUP">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:36.827595" level="INFO">Iniciando PostgreSQL para la suite...</msg>
+<msg time="2026-03-18T15:23:19.149878" level="INFO">Iniciando PostgreSQL para la suite...</msg>
 <arg>Iniciando PostgreSQL para la suite...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:36.827482" elapsed="0.000139"/>
+<status status="PASS" start="2026-03-18T15:23:19.149765" elapsed="0.000139"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:36.827922" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.150216" level="INFO">Starting process:
 /usr/local/pgsql/bin/pg_ctl -D /usr/local/pgsql/data -l logfile start</msg>
-<msg time="2026-03-18T14:58:36.828207" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.028526" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.150520" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.350890" level="INFO">Process completed.</msg>
 <arg>${PG_CTL}</arg>
 <arg>-D</arg>
 <arg>${PG_DATA}</arg>
@@ -41,32 +41,32 @@
 <arg>start</arg>
 <arg>timeout=${DB_START_TIMEOUT}</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:36.827669" elapsed="0.200941"/>
+<status status="PASS" start="2026-03-18T15:23:19.149953" elapsed="0.201019"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:36.827375" elapsed="0.201319"/>
+<status status="PASS" start="2026-03-18T15:23:19.149657" elapsed="0.201396"/>
 </kw>
 <test id="s1-s2-t1" name="Hola Mundo Con Base De Datos" line="22">
 <kw name="Preparar Estado De Prueba" type="SETUP">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.029512" level="INFO">Preparando estado de prueba y verificando conexión a PostgreSQL...</msg>
+<msg time="2026-03-18T15:23:19.351881" level="INFO">Preparando estado de prueba y verificando conexión a PostgreSQL...</msg>
 <arg>Preparando estado de prueba y verificando conexión a PostgreSQL...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.029342" elapsed="0.000201"/>
+<status status="PASS" start="2026-03-18T15:23:19.351698" elapsed="0.000214"/>
 </kw>
 <kw name="Verificar Conexion PostgreSQL">
 <kw name="Set Variable" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.029911" level="INFO">${query} = SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num'...</msg>
+<msg time="2026-03-18T15:23:19.352282" level="INFO">${query} = SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num'...</msg>
 <var>${query}</var>
 <arg>SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;</arg>
 <doc>Returns the given values which can then be assigned to a variables.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.029762" elapsed="0.000165"/>
+<status status="PASS" start="2026-03-18T15:23:19.352126" elapsed="0.000187"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.030443" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.352762" level="INFO">Starting process:
 psql -h localhost -p 5432 -d javi -U javi -c "SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;"</msg>
-<msg time="2026-03-18T14:58:37.030752" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.046253" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:37.046434" level="INFO">${result} = &lt;result object with rc 0&gt;</msg>
+<msg time="2026-03-18T15:23:19.353076" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.360398" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.360480" level="INFO">${result} = &lt;result object with rc 0&gt;</msg>
 <var>${result}</var>
 <arg>${PSQL}</arg>
 <arg>-h</arg>
@@ -83,108 +83,108 @@ psql -h localhost -p 5432 -d javi -U javi -c "SELECT now() AS server_time, versi
 <arg>stderr=PIPE</arg>
 <arg>shell=True</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.029982" elapsed="0.016474"/>
+<status status="PASS" start="2026-03-18T15:23:19.352382" elapsed="0.008118"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.047150" level="INFO">psql stdout:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
+<msg time="2026-03-18T15:23:19.361049" level="INFO">psql stdout:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
 -------------------------------+----------------------------------------------------------------------------------------------------------+-----------+-------------+-------------+-------------
- 2026-03-18 14:58:37.037554+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
+ 2026-03-18 15:23:19.359343+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
 (1 row)
 </msg>
 <arg>psql stdout: ${result.stdout}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.046591" elapsed="0.000597"/>
+<status status="PASS" start="2026-03-18T15:23:19.360593" elapsed="0.000487"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.047671" level="INFO">psql stderr:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
+<msg time="2026-03-18T15:23:19.361508" level="INFO">psql stderr:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
 -------------------------------+----------------------------------------------------------------------------------------------------------+-----------+-------------+-------------+-------------
- 2026-03-18 14:58:37.037554+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
+ 2026-03-18 15:23:19.359343+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
 (1 row)
 </msg>
 <arg>psql stderr: ${result.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.047260" elapsed="0.000445"/>
+<status status="PASS" start="2026-03-18T15:23:19.361141" elapsed="0.000397"/>
 </kw>
 <kw name="Should Be Equal As Integers" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.048155" level="INFO">Argument types are:
+<msg time="2026-03-18T15:23:19.361931" level="INFO">Argument types are:
 &lt;class 'int'&gt;
 &lt;class 'str'&gt;</msg>
 <arg>${result.rc}</arg>
 <arg>0</arg>
 <doc>Fails if objects are unequal after converting them to integers.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.047769" elapsed="0.000429"/>
+<status status="PASS" start="2026-03-18T15:23:19.361594" elapsed="0.000376"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.029629" elapsed="0.018621"/>
+<status status="PASS" start="2026-03-18T15:23:19.351999" elapsed="0.010009"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.029128" elapsed="0.019155"/>
+<status status="PASS" start="2026-03-18T15:23:19.351504" elapsed="0.010530"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.048612" level="INFO">Ejecutando prueba de hola mundo con PostgreSQL levantado.</msg>
+<msg time="2026-03-18T15:23:19.362237" level="INFO">Ejecutando prueba de hola mundo con PostgreSQL levantado.</msg>
 <arg>Ejecutando prueba de hola mundo con PostgreSQL levantado.</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.048456" elapsed="0.000189"/>
+<status status="PASS" start="2026-03-18T15:23:19.362121" elapsed="0.000141"/>
 </kw>
 <kw name="Should Be Equal" owner="BuiltIn">
 <arg>1</arg>
 <arg>1</arg>
 <doc>Fails if the given objects are unequal.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.048736" elapsed="0.000169"/>
+<status status="PASS" start="2026-03-18T15:23:19.362348" elapsed="0.000142"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.028756" elapsed="0.020251"/>
+<status status="PASS" start="2026-03-18T15:23:19.351120" elapsed="0.011456"/>
 </test>
 <kw name="Parar Base De Datos" type="TEARDOWN">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.049553" level="INFO">Parando PostgreSQL al finalizar la suite...</msg>
+<msg time="2026-03-18T15:23:19.363012" level="INFO">Parando PostgreSQL al finalizar la suite...</msg>
 <arg>Parando PostgreSQL al finalizar la suite...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.049420" elapsed="0.000162"/>
+<status status="PASS" start="2026-03-18T15:23:19.362899" elapsed="0.000137"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.049911" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.363309" level="INFO">Starting process:
 /usr/local/pgsql/bin/pg_ctl -D /usr/local/pgsql/data stop</msg>
-<msg time="2026-03-18T14:58:37.050237" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.250648" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.363592" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.563936" level="INFO">Process completed.</msg>
 <arg>${PG_CTL}</arg>
 <arg>-D</arg>
 <arg>${PG_DATA}</arg>
 <arg>stop</arg>
 <arg>timeout=10s</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.049641" elapsed="0.201096"/>
+<status status="PASS" start="2026-03-18T15:23:19.363087" elapsed="0.200926"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.049304" elapsed="0.201506"/>
+<status status="PASS" start="2026-03-18T15:23:19.362811" elapsed="0.201272"/>
 </kw>
 <doc>Pruebas de pipeline E2E con PostgreSQL: hola mundo + conexión.</doc>
-<status status="PASS" start="2026-03-18T14:58:36.824141" elapsed="0.426693"/>
+<status status="PASS" start="2026-03-18T15:23:19.146416" elapsed="0.417691"/>
 </suite>
 <suite id="s1-s3" name="Pipeline Integration" source="/home/javi/OpenSource/botan-tls-testserver/tests/robot/tests/pipeline_integration.robot">
 <kw name="Iniciar Sistema Completo" type="SETUP">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.258303" level="INFO">=== INICIO SUITE INTEGRACION ===</msg>
+<msg time="2026-03-18T15:23:19.571783" level="INFO">=== INICIO SUITE INTEGRACION ===</msg>
 <arg>=== INICIO SUITE INTEGRACION ===</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.258160" elapsed="0.000168"/>
+<status status="PASS" start="2026-03-18T15:23:19.571649" elapsed="0.000159"/>
 </kw>
 <kw name="Matar Procesos Sistema Si Existen">
 <kw name="Get Environment Variable" owner="OperatingSystem">
-<msg time="2026-03-18T14:58:37.258585" level="INFO">${user} = javi</msg>
+<msg time="2026-03-18T15:23:19.572058" level="INFO">${user} = javi</msg>
 <var>${user}</var>
 <arg>USER</arg>
 <doc>Returns the value of an environment variable with the given name.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.258504" elapsed="0.000094"/>
+<status status="PASS" start="2026-03-18T15:23:19.571978" elapsed="0.000093"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.258770" level="INFO">Matando procesos previos para usuario javi...</msg>
+<msg time="2026-03-18T15:23:19.572238" level="INFO">Matando procesos previos para usuario javi...</msg>
 <arg>Matando procesos previos para usuario ${user}...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.258645" elapsed="0.000147"/>
+<status status="PASS" start="2026-03-18T15:23:19.572117" elapsed="0.000142"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.259127" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.572580" level="INFO">Starting process:
 pkill -u javi -f scripts/server.sh</msg>
-<msg time="2026-03-18T14:58:37.259468" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.360021" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:37.360122" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
+<msg time="2026-03-18T15:23:19.572852" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.673045" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.673190" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
 <var>${res}</var>
 <arg>pkill -u ${user} -f scripts/server.sh</arg>
 <arg>shell=True</arg>
@@ -192,20 +192,20 @@ pkill -u javi -f scripts/server.sh</msg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.258841" elapsed="0.101302"/>
+<status status="PASS" start="2026-03-18T15:23:19.572315" elapsed="0.100893"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.360908" level="INFO">pkill server.sh rc=1 stderr=</msg>
+<msg time="2026-03-18T15:23:19.673946" level="INFO">pkill server.sh rc=1 stderr=</msg>
 <arg>pkill server.sh rc=${res.rc} stderr=${res.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.360231" elapsed="0.000705"/>
+<status status="PASS" start="2026-03-18T15:23:19.673327" elapsed="0.000644"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.361246" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.674266" level="INFO">Starting process:
 pkill -u javi -f scripts/controller.sh</msg>
-<msg time="2026-03-18T14:58:37.361517" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.461680" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:37.461801" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
+<msg time="2026-03-18T15:23:19.674551" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.774687" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.774769" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
 <var>${res}</var>
 <arg>pkill -u ${user} -f scripts/controller.sh</arg>
 <arg>shell=True</arg>
@@ -213,20 +213,20 @@ pkill -u javi -f scripts/controller.sh</msg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.360996" elapsed="0.100826"/>
+<status status="PASS" start="2026-03-18T15:23:19.674027" elapsed="0.100762"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.462703" level="INFO">pkill controller.sh rc=1 stderr=</msg>
+<msg time="2026-03-18T15:23:19.775518" level="INFO">pkill controller.sh rc=1 stderr=</msg>
 <arg>pkill controller.sh rc=${res.rc} stderr=${res.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.461935" elapsed="0.000806"/>
+<status status="PASS" start="2026-03-18T15:23:19.774874" elapsed="0.000678"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.463077" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.775865" level="INFO">Starting process:
 pkill -u javi -f scripts/sensor.sh</msg>
-<msg time="2026-03-18T14:58:37.463359" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.563510" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:37.563608" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
+<msg time="2026-03-18T15:23:19.776120" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:19.876264" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.876373" level="INFO">${res} = &lt;result object with rc 1&gt;</msg>
 <var>${res}</var>
 <arg>pkill -u ${user} -f scripts/sensor.sh</arg>
 <arg>shell=True</arg>
@@ -234,29 +234,29 @@ pkill -u javi -f scripts/sensor.sh</msg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.462802" elapsed="0.100827"/>
+<status status="PASS" start="2026-03-18T15:23:19.775615" elapsed="0.100780"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.564462" level="INFO">pkill sensor.sh rc=1 stderr=</msg>
+<msg time="2026-03-18T15:23:19.877188" level="INFO">pkill sensor.sh rc=1 stderr=</msg>
 <arg>pkill sensor.sh rc=${res.rc} stderr=${res.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.563731" elapsed="0.000765"/>
+<status status="PASS" start="2026-03-18T15:23:19.876493" elapsed="0.000724"/>
 </kw>
 <doc>Mata instancias previas de server.sh, controller.sh y sensor.sh del usuario actual.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.258419" elapsed="0.306124"/>
+<status status="PASS" start="2026-03-18T15:23:19.571897" elapsed="0.305359"/>
 </kw>
 <kw name="Iniciar Base De Datos">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.564904" level="INFO">Iniciando PostgreSQL para la suite...</msg>
+<msg time="2026-03-18T15:23:19.877585" level="INFO">Iniciando PostgreSQL para la suite...</msg>
 <arg>Iniciando PostgreSQL para la suite...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.564772" elapsed="0.000157"/>
+<status status="PASS" start="2026-03-18T15:23:19.877465" elapsed="0.000145"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.565249" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:19.877923" level="INFO">Starting process:
 /usr/local/pgsql/bin/pg_ctl -D /usr/local/pgsql/data -l logfile start</msg>
-<msg time="2026-03-18T14:58:37.565550" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.765870" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:19.878202" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:20.078498" level="INFO">Process completed.</msg>
 <arg>${PG_CTL}</arg>
 <arg>-D</arg>
 <arg>${PG_DATA}</arg>
@@ -265,30 +265,30 @@ pkill -u javi -f scripts/sensor.sh</msg>
 <arg>start</arg>
 <arg>timeout=${DB_START_TIMEOUT}</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.564982" elapsed="0.200981"/>
+<status status="PASS" start="2026-03-18T15:23:19.877662" elapsed="0.200924"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.564650" elapsed="0.201386"/>
+<status status="PASS" start="2026-03-18T15:23:19.877362" elapsed="0.201297"/>
 </kw>
 <kw name="Verificar Conexion PostgreSQL">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.766616" level="INFO">Verificando conexión a PostgreSQL...</msg>
+<msg time="2026-03-18T15:23:20.079213" level="INFO">Verificando conexión a PostgreSQL...</msg>
 <arg>Verificando conexión a PostgreSQL...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.766407" elapsed="0.000245"/>
+<status status="PASS" start="2026-03-18T15:23:20.079019" elapsed="0.000228"/>
 </kw>
 <kw name="Set Variable" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.766929" level="INFO">${query} = SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num'...</msg>
+<msg time="2026-03-18T15:23:20.079484" level="INFO">${query} = SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num'...</msg>
 <var>${query}</var>
 <arg>SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;</arg>
 <doc>Returns the given values which can then be assigned to a variables.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.766731" elapsed="0.000218"/>
+<status status="PASS" start="2026-03-18T15:23:20.079331" elapsed="0.000169"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:37.767381" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:20.079916" level="INFO">Starting process:
 psql -h localhost -p 5432 -d javi -U javi -c "SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;"</msg>
-<msg time="2026-03-18T14:58:37.767687" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:37.783000" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:37.783086" level="INFO">${result} = &lt;result object with rc 0&gt;</msg>
+<msg time="2026-03-18T15:23:20.080264" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:20.095594" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:20.095678" level="INFO">${result} = &lt;result object with rc 0&gt;</msg>
 <var>${result}</var>
 <arg>${PSQL}</arg>
 <arg>-h</arg>
@@ -305,103 +305,103 @@ psql -h localhost -p 5432 -d javi -U javi -c "SELECT now() AS server_time, versi
 <arg>stderr=PIPE</arg>
 <arg>shell=True</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.767007" elapsed="0.016101"/>
+<status status="PASS" start="2026-03-18T15:23:20.079555" elapsed="0.016144"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.783716" level="INFO">psql stdout:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
+<msg time="2026-03-18T15:23:20.096309" level="INFO">psql stdout:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
 -------------------------------+----------------------------------------------------------------------------------------------------------+-----------+-------------+-------------+-------------
- 2026-03-18 14:58:37.774219+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
+ 2026-03-18 15:23:20.087392+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
 (1 row)
 </msg>
 <arg>psql stdout: ${result.stdout}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.783240" elapsed="0.000513"/>
+<status status="PASS" start="2026-03-18T15:23:20.095831" elapsed="0.000517"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.784178" level="INFO">psql stderr:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
+<msg time="2026-03-18T15:23:20.096745" level="INFO">psql stderr:           server_time          |                                             postgres_version                                             | server_ip | server_port | in_recovery | version_num 
 -------------------------------+----------------------------------------------------------------------------------------------------------+-----------+-------------+-------------+-------------
- 2026-03-18 14:58:37.774219+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
+ 2026-03-18 15:23:20.087392+01 | PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 14.3.1 20250617 (Red Hat 14.3.1-2), 64-bit | ::1       |        5432 | f           | 180003
 (1 row)
 </msg>
 <arg>psql stderr: ${result.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.783822" elapsed="0.000385"/>
+<status status="PASS" start="2026-03-18T15:23:20.096407" elapsed="0.000367"/>
 </kw>
 <kw name="Should Be Equal As Integers" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.784612" level="INFO">Argument types are:
+<msg time="2026-03-18T15:23:20.097167" level="INFO">Argument types are:
 &lt;class 'int'&gt;
 &lt;class 'str'&gt;</msg>
 <arg>${result.rc}</arg>
 <arg>0</arg>
 <doc>Fails if objects are unequal after converting them to integers.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.784262" elapsed="0.000385"/>
+<status status="PASS" start="2026-03-18T15:23:20.096830" elapsed="0.000375"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.766191" elapsed="0.018492"/>
+<status status="PASS" start="2026-03-18T15:23:20.078839" elapsed="0.018402"/>
 </kw>
 <kw name="Iniciar Sistema Comunicaciones">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:37.784976" level="INFO">Lanzando server, controller y sensor desde scripts .sh...</msg>
+<msg time="2026-03-18T15:23:20.097558" level="INFO">Lanzando server, controller y sensor desde scripts .sh...</msg>
 <arg>Lanzando server, controller y sensor desde scripts .sh...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.784862" elapsed="0.000138"/>
+<status status="PASS" start="2026-03-18T15:23:20.097438" elapsed="0.000145"/>
 </kw>
 <kw name="Start Process" owner="Process">
-<msg time="2026-03-18T14:58:37.785256" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:20.097837" level="INFO">Starting process:
 bash scripts/server.sh</msg>
 <arg>${SERVER_CMD}</arg>
 <arg>shell=True</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Starts a new process on background.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.785051" elapsed="0.000505"/>
+<status status="PASS" start="2026-03-18T15:23:20.097635" elapsed="0.000478"/>
 </kw>
 <kw name="Start Process" owner="Process">
-<msg time="2026-03-18T14:58:37.785899" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:20.098478" level="INFO">Starting process:
 bash scripts/controller.sh</msg>
 <arg>${CONTROLLER_CMD}</arg>
 <arg>shell=True</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Starts a new process on background.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.785643" elapsed="0.000505"/>
+<status status="PASS" start="2026-03-18T15:23:20.098202" elapsed="0.000548"/>
 </kw>
 <kw name="Start Process" owner="Process">
-<msg time="2026-03-18T14:58:37.786426" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:20.099088" level="INFO">Starting process:
 bash scripts/sensor.sh</msg>
 <arg>${SENSOR_CMD}</arg>
 <arg>shell=True</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Starts a new process on background.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.786213" elapsed="0.001264"/>
+<status status="PASS" start="2026-03-18T15:23:20.098833" elapsed="0.001200"/>
 </kw>
 <kw name="Sleep" owner="BuiltIn">
-<msg time="2026-03-18T14:58:40.787828" level="INFO">Slept 3 seconds.</msg>
+<msg time="2026-03-18T15:23:23.100351" level="INFO">Slept 3 seconds.</msg>
 <arg>3s</arg>
 <doc>Pauses the test executed for the given time.</doc>
-<status status="PASS" start="2026-03-18T14:58:37.787565" elapsed="3.000354"/>
+<status status="PASS" start="2026-03-18T15:23:20.100097" elapsed="3.000341"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.784769" elapsed="3.003218"/>
+<status status="PASS" start="2026-03-18T15:23:20.097342" elapsed="3.003162"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:37.257979" elapsed="3.530046"/>
+<status status="PASS" start="2026-03-18T15:23:19.571471" elapsed="3.529070"/>
 </kw>
 <test id="s1-s3-t1" name="Primer Test: CLI Devuelve OK" line="29">
 <kw name="Preparar Caso Integración" type="SETUP">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:40.788875" level="INFO">Preparando estado previo al caso de integración (placeholder).</msg>
+<msg time="2026-03-18T15:23:23.101277" level="INFO">Preparando estado previo al caso de integración (placeholder).</msg>
 <arg>Preparando estado previo al caso de integración (placeholder).</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:40.788678" elapsed="0.000233"/>
+<status status="PASS" start="2026-03-18T15:23:23.101109" elapsed="0.000207"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:40.788474" elapsed="0.000479"/>
+<status status="PASS" start="2026-03-18T15:23:23.100923" elapsed="0.000426"/>
 </kw>
 <kw name="Verificar CLI Configuracion OK">
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:40.789626" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:23.101908" level="INFO">Starting process:
 bash server/scripts/cli_test.sh</msg>
-<msg time="2026-03-18T14:58:40.789932" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:42.891685" level="INFO">Process completed.</msg>
-<msg time="2026-03-18T14:58:42.891828" level="INFO">${result} = &lt;result object with rc 1&gt;</msg>
+<msg time="2026-03-18T15:23:23.102226" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:23.202506" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:23.202629" level="INFO">${result} = &lt;result object with rc 0&gt;</msg>
 <var>${result}</var>
 <arg>${CLI_TEST_CMD}</arg>
 <arg>shell=True</arg>
@@ -409,189 +409,178 @@ bash server/scripts/cli_test.sh</msg>
 <arg>stderr=PIPE</arg>
 <arg>timeout=${CLI_TIMEOUT}</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:40.789274" elapsed="2.102577"/>
+<status status="PASS" start="2026-03-18T15:23:23.101589" elapsed="0.101061"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:42.892708" level="INFO">CLI stdout:
+<msg time="2026-03-18T15:23:23.203355" level="INFO">CLI stdout:
 &gt;&gt;&gt; Sending: CONFIG_IP 1 IP 7.7.7.7/22
 Server: Certificate validation status: Verified
 Server: Handshake complete, TLS v1.3
 Server: Negotiated ciphersuite CHACHA20_POLY1305_SHA256
 Server: Key exchange using ML-KEM-768
-Server: Session ID 69BAAF90540894C0CFC26330DC0BB4CCB66DC34059A3852C4D49E0F08F97E228
+Server: Session ID 69BAB55B22CD0D4A3C8E9D9C50D1173D987D0EF219584F5416236A098FC791B9
 Server: Handshake complete
-Server: ERROR: ERROR: Request Timed Out (ID: 3)
-Command 'CONFIG_IP 1 IP 7.7.7.7/22' did not receive an OK: response.
-&gt;&gt;&gt; Sending: CONFIG_IP 2 IP 0.0.0.0/24
 Server: Alert: close_notify
-Command 'CONFIG_IP 2 IP 0.0.0.0/24' did not receive an OK: response.
-server/scripts/cli_test.sh: línea 50: "${BOTAN[1]}": Descriptor de fichero erróneo
+Command 'CONFIG_IP 1 IP 7.7.7.7/22' did not receive an OK: response.
+Error: Botan process is not running.
 {"kex_algo": "ML-KEM-768","is_quantum_safe": true,"wire_code": "0x0201"}
-[DB] FATAL: Connection lost (Server terminated session). Lost connection to the database server.
-CONFIG_IP 1 IP 7.7.7.7/22
 [DB] Connection not available. Cannot add pending config.</msg>
 <arg>CLI stdout:\n${result.stdout}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.891978" elapsed="0.003133"/>
+<status status="PASS" start="2026-03-18T15:23:23.202764" elapsed="0.002990"/>
 </kw>
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:42.895643" level="INFO">CLI stderr:
+<msg time="2026-03-18T15:23:23.206239" level="INFO">CLI stderr:
 &gt;&gt;&gt; Sending: CONFIG_IP 1 IP 7.7.7.7/22
 Server: Certificate validation status: Verified
 Server: Handshake complete, TLS v1.3
 Server: Negotiated ciphersuite CHACHA20_POLY1305_SHA256
 Server: Key exchange using ML-KEM-768
-Server: Session ID 69BAAF90540894C0CFC26330DC0BB4CCB66DC34059A3852C4D49E0F08F97E228
+Server: Session ID 69BAB55B22CD0D4A3C8E9D9C50D1173D987D0EF219584F5416236A098FC791B9
 Server: Handshake complete
-Server: ERROR: ERROR: Request Timed Out (ID: 3)
-Command 'CONFIG_IP 1 IP 7.7.7.7/22' did not receive an OK: response.
-&gt;&gt;&gt; Sending: CONFIG_IP 2 IP 0.0.0.0/24
 Server: Alert: close_notify
-Command 'CONFIG_IP 2 IP 0.0.0.0/24' did not receive an OK: response.
-server/scripts/cli_test.sh: línea 50: "${BOTAN[1]}": Descriptor de fichero erróneo
+Command 'CONFIG_IP 1 IP 7.7.7.7/22' did not receive an OK: response.
+Error: Botan process is not running.
 {"kex_algo": "ML-KEM-768","is_quantum_safe": true,"wire_code": "0x0201"}
-[DB] FATAL: Connection lost (Server terminated session). Lost connection to the database server.
-CONFIG_IP 1 IP 7.7.7.7/22
 [DB] Connection not available. Cannot add pending config.</msg>
 <arg>CLI stderr:\n${result.stderr}</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.895177" elapsed="0.002547"/>
+<status status="PASS" start="2026-03-18T15:23:23.205821" elapsed="0.002627"/>
 </kw>
 <kw name="Should Be Equal As Integers" owner="BuiltIn">
-<msg time="2026-03-18T14:58:42.898084" level="INFO">Argument types are:
+<msg time="2026-03-18T15:23:23.208824" level="INFO">Argument types are:
 &lt;class 'int'&gt;
 &lt;class 'str'&gt;</msg>
-<msg time="2026-03-18T14:58:42.898192" level="FAIL">1 != 0</msg>
 <arg>${result.rc}</arg>
 <arg>0</arg>
 <doc>Fails if objects are unequal after converting them to integers.</doc>
-<status status="FAIL" start="2026-03-18T14:58:42.897776" elapsed="0.000525">1 != 0</status>
+<status status="PASS" start="2026-03-18T15:23:23.208503" elapsed="0.000353"/>
 </kw>
 <kw name="Should Contain" owner="BuiltIn">
 <arg>${result.stdout}</arg>
 <arg>OK:</arg>
 <doc>Fails if ``container`` does not contain ``item`` one or more times.</doc>
-<status status="NOT RUN" start="2026-03-18T14:58:42.898365" elapsed="0.000011"/>
+<status status="PASS" start="2026-03-18T15:23:23.208910" elapsed="0.000413"/>
 </kw>
 <kw name="Should Not Contain" owner="BuiltIn">
 <arg>${result.stdout}</arg>
 <arg>FAILED:</arg>
 <doc>Fails if ``container`` contains ``item`` one or more times.</doc>
-<status status="NOT RUN" start="2026-03-18T14:58:42.898417" elapsed="0.000009"/>
+<status status="PASS" start="2026-03-18T15:23:23.209377" elapsed="0.000304"/>
 </kw>
 <kw name="Should Not Contain" owner="BuiltIn">
 <arg>${result.stdout}</arg>
 <arg>ERROR:</arg>
 <doc>Fails if ``container`` contains ``item`` one or more times.</doc>
-<status status="NOT RUN" start="2026-03-18T14:58:42.898463" elapsed="0.000009"/>
+<status status="PASS" start="2026-03-18T15:23:23.209761" elapsed="0.000303"/>
 </kw>
 <doc>Ejecuta server/scripts/cli_test.sh y valida que devuelve OK: y no FAILED:/ERROR:.</doc>
-<status status="FAIL" start="2026-03-18T14:58:40.789131" elapsed="2.109404">1 != 0</status>
+<status status="PASS" start="2026-03-18T15:23:23.101464" elapsed="0.108636"/>
 </kw>
-<status status="FAIL" start="2026-03-18T14:58:40.788073" elapsed="2.110579">1 != 0</status>
+<status status="PASS" start="2026-03-18T15:23:23.100587" elapsed="0.109596"/>
 </test>
 <kw name="Parar Sistema Completo" type="TEARDOWN">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:42.899073" level="INFO">=== FIN SUITE INTEGRACION ===</msg>
+<msg time="2026-03-18T15:23:23.210603" level="INFO">=== FIN SUITE INTEGRACION ===</msg>
 <arg>=== FIN SUITE INTEGRACION ===</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.898962" elapsed="0.000134"/>
+<status status="PASS" start="2026-03-18T15:23:23.210496" elapsed="0.000129"/>
 </kw>
 <kw name="Parar Sistema Comunicaciones">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:42.899351" level="INFO">Parando server, controller y sensor...</msg>
+<msg time="2026-03-18T15:23:23.210865" level="INFO">Parando server, controller y sensor...</msg>
 <arg>Parando server, controller y sensor...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.899246" elapsed="0.000126"/>
+<status status="PASS" start="2026-03-18T15:23:23.210768" elapsed="0.000120"/>
 </kw>
 <kw name="Get Environment Variable" owner="OperatingSystem">
-<msg time="2026-03-18T14:58:42.899489" level="INFO">${user} = javi</msg>
+<msg time="2026-03-18T15:23:23.211003" level="INFO">${user} = javi</msg>
 <var>${user}</var>
 <arg>USER</arg>
 <doc>Returns the value of an environment variable with the given name.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.899418" elapsed="0.000083"/>
+<status status="PASS" start="2026-03-18T15:23:23.210932" elapsed="0.000084"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:42.899828" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:23.211333" level="INFO">Starting process:
 pkill -u javi -f scripts/server.sh</msg>
-<msg time="2026-03-18T14:58:42.900117" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:43.000284" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:23.211605" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:23.311761" level="INFO">Process completed.</msg>
 <arg>pkill -u ${user} -f scripts/server.sh</arg>
 <arg>shell=True</arg>
 <arg>timeout=5s</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:42.899544" elapsed="0.100833"/>
+<status status="PASS" start="2026-03-18T15:23:23.211064" elapsed="0.100758"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:43.000876" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:23.312310" level="INFO">Starting process:
 pkill -u javi -f scripts/controller.sh</msg>
-<msg time="2026-03-18T14:58:43.001157" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:43.101335" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:23.312582" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:23.412758" level="INFO">Process completed.</msg>
 <arg>pkill -u ${user} -f scripts/controller.sh</arg>
 <arg>shell=True</arg>
 <arg>timeout=5s</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:43.000495" elapsed="0.100927"/>
+<status status="PASS" start="2026-03-18T15:23:23.311924" elapsed="0.100881"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:43.101948" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:23.413196" level="INFO">Starting process:
 pkill -u javi -f scripts/sensor.sh</msg>
-<msg time="2026-03-18T14:58:43.102226" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:43.202407" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:23.413596" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:23.513772" level="INFO">Process completed.</msg>
 <arg>pkill -u ${user} -f scripts/sensor.sh</arg>
 <arg>shell=True</arg>
 <arg>timeout=5s</arg>
 <arg>stdout=PIPE</arg>
 <arg>stderr=PIPE</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:43.101554" elapsed="0.100943"/>
+<status status="PASS" start="2026-03-18T15:23:23.412890" elapsed="0.100944"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:42.899167" elapsed="0.303413"/>
+<status status="PASS" start="2026-03-18T15:23:23.210696" elapsed="0.303200"/>
 </kw>
 <kw name="Parar Base De Datos">
 <kw name="Log" owner="BuiltIn">
-<msg time="2026-03-18T14:58:43.203081" level="INFO">Parando PostgreSQL al finalizar la suite...</msg>
+<msg time="2026-03-18T15:23:23.514359" level="INFO">Parando PostgreSQL al finalizar la suite...</msg>
 <arg>Parando PostgreSQL al finalizar la suite...</arg>
 <doc>Logs the given message with the given level.</doc>
-<status status="PASS" start="2026-03-18T14:58:43.202895" elapsed="0.000213"/>
+<status status="PASS" start="2026-03-18T15:23:23.514168" elapsed="0.000222"/>
 </kw>
 <kw name="Run Process" owner="Process">
-<msg time="2026-03-18T14:58:43.203429" level="INFO">Starting process:
+<msg time="2026-03-18T15:23:23.514682" level="INFO">Starting process:
 /usr/local/pgsql/bin/pg_ctl -D /usr/local/pgsql/data stop</msg>
-<msg time="2026-03-18T14:58:43.203749" level="INFO">Waiting for process to complete.</msg>
-<msg time="2026-03-18T14:58:43.404052" level="INFO">Process completed.</msg>
+<msg time="2026-03-18T15:23:23.515081" level="INFO">Waiting for process to complete.</msg>
+<msg time="2026-03-18T15:23:23.715404" level="INFO">Process completed.</msg>
 <arg>${PG_CTL}</arg>
 <arg>-D</arg>
 <arg>${PG_DATA}</arg>
 <arg>stop</arg>
 <arg>timeout=10s</arg>
 <doc>Runs a process and waits for it to complete.</doc>
-<status status="PASS" start="2026-03-18T14:58:43.203165" elapsed="0.200967"/>
+<status status="PASS" start="2026-03-18T15:23:23.514445" elapsed="0.201046"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:43.202725" elapsed="0.201470"/>
+<status status="PASS" start="2026-03-18T15:23:23.514024" elapsed="0.201540"/>
 </kw>
-<status status="PASS" start="2026-03-18T14:58:42.898875" elapsed="0.505351"/>
+<status status="PASS" start="2026-03-18T15:23:23.210408" elapsed="0.505190"/>
 </kw>
 <doc>Pipeline E2E: DB + server + controller + sensor + CLI.</doc>
-<status status="FAIL" start="2026-03-18T14:58:37.251274" elapsed="6.152968"/>
+<status status="PASS" start="2026-03-18T15:23:19.564543" elapsed="4.151075"/>
 </suite>
-<status status="FAIL" start="2026-03-18T14:58:36.803832" elapsed="6.600844"/>
+<status status="PASS" start="2026-03-18T15:23:19.127022" elapsed="4.589094"/>
 </suite>
 <statistics>
 <total>
-<stat pass="2" fail="1" skip="0">All Tests</stat>
+<stat pass="3" fail="0" skip="0">All Tests</stat>
 </total>
 <tag>
 </tag>
 <suite>
-<stat name="Tests" id="s1" pass="2" fail="1" skip="0">Tests</stat>
+<stat name="Tests" id="s1" pass="3" fail="0" skip="0">Tests</stat>
 <stat name="Cli Load" id="s1-s1" pass="1" fail="0" skip="0">Tests.Cli Load</stat>
 <stat name="Pipeline Db" id="s1-s2" pass="1" fail="0" skip="0">Tests.Pipeline Db</stat>
-<stat name="Pipeline Integration" id="s1-s3" pass="0" fail="1" skip="0">Tests.Pipeline Integration</stat>
+<stat name="Pipeline Integration" id="s1-s3" pass="1" fail="0" skip="0">Tests.Pipeline Integration</stat>
 </suite>
 </statistics>
 <errors>

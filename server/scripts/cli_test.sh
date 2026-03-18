@@ -47,4 +47,6 @@ send_and_wait "CONFIG_IP 1 IP 7.7.7.7/22";
 send_and_wait "CONFIG_IP 2 IP 0.0.0.0/24";
 
 # Cleanly close
-echo "quit" >&"${BOTAN[1]}"
+if [[ -n ${BOTAN_PID} ]] && kill -0 "${BOTAN_PID}" 2>/dev/null; then
+    echo "quit" >&"${BOTAN[1]}"
+fi
