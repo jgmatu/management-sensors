@@ -101,3 +101,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Robot Framework outputs
+tests/robot/output/
+output.xml
+log.html
+report.html
+debug.log
+# Robot Framework temp / debug
+*.db
+*.pabotsuitenames
+.pabot_results/

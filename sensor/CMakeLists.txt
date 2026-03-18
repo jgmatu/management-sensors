@@ -20,7 +20,13 @@ find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 add_executable(sensor src/main.cpp)
 
 # 4. Include directories (if you have headers in an 'include' folder)
-target_include_directories(sensor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(sensor 
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
 
 # 5. Link the Paho MQTT C++ library
 # This automatically handles the underlying Paho C library and threading dependencies

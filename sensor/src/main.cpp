@@ -1,10 +1,10 @@
-#include <iostream>
 #include <string>
 #include <chrono>
 #include <thread>
 #include <random>
 #include <boost/json.hpp>
 #include <mqtt/async_client.h>
+#include <log/Log.hpp>
 
 namespace json = boost::json;
 
@@ -15,7 +15,6 @@ const std::string REQUEST_CONFIG_TOPIC { "config/requested" };
 const std::string EVENTS_CONFIG_TOPIC { "config/events" };
 const std::string TELEMETRY_TOPIC { "telemetry/state" };
 
-
 /**
  * @brief Función de telemetría para el sensor.
  */
@@ -24,7 +23,10 @@ void run_telemetry_producer(std::stop_token st, mqtt::async_client& client, int 
     std::default_random_engine generator;
     std::uniform_real_distribution<double> distribution(30.0, 80.0);
 
-    std::cout << "[Telemetry] Sensor " << sensor_id << " producer started!" << std::endl;
+    logging::Logger::instance().info(
+        "sensor",
+        "[Telemetry] Sensor " + std::to_string(sensor_id) + " producer started!"
+    );
 
     while (!st.stop_requested()) {
         try {
@@ -36,15 +38,15 @@ void run_telemetry_producer(std::stop_token st, mqtt::async_client& client, int 
 
             std::string payload = boost::json::serialize(obj);
 
-            // Publicamos usando la API de Paho C++
-            // Importante: TELEMETRY_TOPIC debe ser const char* o std::string
             client.publish(TELEMETRY_TOPIC, payload, 1, false);
-
-        } catch (const mqtt::exception& exc) {
-            std::cerr << "[Telemetry-Error] MQTT: " << exc.what() << std::endl;
+        }
+        catch (const mqtt::exception& exc) {
+            logging::Logger::instance().error(
+                "sensor",
+                std::string("[Telemetry-Error] MQTT: ") + exc.what()
+            );
         }
 
-        // Espera de 10 segundos o hasta que se solicite la parada
         std::this_thread::sleep_for(std::chrono::seconds(100000));
     }
 }
@@ -62,19 +64,24 @@ int main()
     {
         client.start_consuming();
 
-        std::cout << "Connecting CPU Node: " << CLIENT_ID << "..." << std::endl;
+        logging::Logger::instance().info(
+            "sensor",
+            "Connecting CPU Node: " + CLIENT_ID + "..."
+        );
         client.connect(connOpts)->wait();
 
         std::jthread telemetry_thread([&client](std::stop_token st) {
             run_telemetry_producer(st, client, 1);
         });
 
-        std::cout << "[Main] Subscriber active. Waiting for 'config/requested'..." << std::endl;
+        logging::Logger::instance().info(
+            "sensor",
+            "[Main] Subscriber active. Waiting for 'config/requested'..."
+        );
         client.subscribe(REQUEST_CONFIG_TOPIC, 1)->wait();
 
         for (;;)
         {
-            // This blocks the main thread until a message arrives
             auto msg = client.consume_message();
             if (!msg) break;
 
@@ -82,26 +89,38 @@ int main()
             {
                 auto jv = json::parse(msg->to_string());
                 auto& obj = jv.as_object();
-                std::cout << "[CONFIG] Received Update: " << json::serialize(jv) << std::endl;
 
-                // Simulate config sensor process latency...
+                logging::Logger::instance().info(
+                    "sensor",
+                    std::string("[CONFIG] Received Update: ") + json::serialize(jv)
+                );
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
                 obj["channel"] = "config_events";
                 std::string payload = boost::json::serialize(obj);
 
-                std::cout << "[CONFIG] Publish commit config: " << json::serialize(obj) << std::endl;
+                logging::Logger::instance().info(
+                    "sensor",
+                    std::string("[CONFIG] Publish commit config: ") + json::serialize(obj)
+                );
 
                 client.publish(EVENTS_CONFIG_TOPIC, payload, 1, false);
             }
             catch (const std::exception& e) {
-                std::cerr << "[JSON-Error] Malformed message: " << e.what() << std::endl;
+                logging::Logger::instance().error(
+                    "sensor",
+                    std::string("[JSON-Error] Malformed message: ") + e.what()
+                );
             }
         }
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Error: " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "sensor",
+            std::string("Error: ") + e.what()
+        );
         return 1;
     }
 
