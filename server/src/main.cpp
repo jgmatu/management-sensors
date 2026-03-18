@@ -87,28 +87,31 @@ const std::map<std::string, std::function<std::string(const SensorCommand&)>> co
  * incoming CLI-like command, dispatches it to the corresponding handler
  * in `command_registry`, and returns the resulting message as bytes.
  */
-std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
+ std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
     if (input.empty()) return {};
     const std::string request(input.begin(), input.end());
-
     SensorCommandCli cli(request);
 
-    std::string response;
-
-    std::cout << "[CLI] Command received: " << cli.command_ << std::endl;
-
-    // Look up the 'cmd' field in the map
-    auto it = command_registry.find(cli.command_.cmd);
-
-    if (it != command_registry.end())
-    {
-        response = it->second(cli.command_); // Execute the lambda passing the whole struct
+    // Señal de salida del cliente de pruebas:
+    // si el parser marca el comando como INVALID y el texto es "quit",
+    // no seguimos procesando ni buscamos en el registry.
+    if (!cli.command_.valid && cli.command_.cmd == "quit") {
+        // Opciones:
+        // 1) Cerrar en silencio:
+        return {};
+        // 2) O devolver un mensaje de despedida:
+        // static const std::string bye = "BYE";
+        // return std::vector<uint8_t>(bye.begin(), bye.end());
     }
-    else
-    {
+
+    std::string response;
+    std::cout << "[CLI] Command received: " << cli.command_ << std::endl;
+    auto it = command_registry.find(cli.command_.cmd);
+    if (it != command_registry.end()) {
+        response = it->second(cli.command_);
+    } else {
         response = "Command '" + cli.command_.cmd + "' not found in registry.";
     }
-
     return std::vector<uint8_t>(response.begin(), response.end());
 }
 
