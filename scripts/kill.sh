@@ -1,6 +1,8 @@
 user="$USER"
 
 SLEEP_STEP=0.5
+PG_CTL="/usr/local/pgsql/bin/pg_ctl"
+PG_DATA="/usr/local/pgsql/data"
 
 # 1) Server (wrapper + binario real)
 pkill -TERM -u "$user" -f 'bash scripts/server.sh' 2>/dev/null || true
@@ -33,6 +35,9 @@ pkill -KILL -u "$user" -f 'socat.*TCP-LISTEN:2000' 2>/dev/null || true
 pkill -TERM -u "$user" -f 'botan tls_client' 2>/dev/null || true
 sleep $SLEEP_STEP
 pkill -KILL -u "$user" -f 'botan tls_client' 2>/dev/null || true
+
+"${PG_CTL}" -D "${PG_DATA}" stop >/dev/null 2>&1 || true
+sleep "${SLEEP_STEP}"
 
 # Verifica
 ss -ltnp | grep ':2000' || true

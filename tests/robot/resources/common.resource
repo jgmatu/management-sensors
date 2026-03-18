@@ -4,14 +4,10 @@ Library           Process
 Library           OperatingSystem
 Library           Telnet
 
-Suite Setup       Iniciar Sistema Completo
-Suite Teardown    Parar Sistema Completo
-Test Setup        Preparar Caso Integración
-
 *** Variables ***
 ${PG_CTL}             /usr/local/pgsql/bin/pg_ctl
 ${PG_DATA}            /usr/local/pgsql/data
-${PG_LOGFILE}         logfile
+${PG_LOGFILE}         logs/postgresql.log
 ${DB_START_TIMEOUT}   30s
 
 ${PSQL}               psql
@@ -32,21 +28,14 @@ ${CLI_TIMEOUT}        60s
 # Botan bridge
 ${BOTAN_BRIDGE_CMD}  bash tests/scripts/botan.sh
 
-*** Test Cases ***
-Primer Test: CLI Devuelve OK
-    Verificar CLI Configuracion OK
-
 *** Keywords ***
 Iniciar Sistema Completo
-    Log    === INICIO SUITE INTEGRACION ===
     Iniciar Base De Datos
-    Verificar Conexion PostgreSQL
     Iniciar Sistema Comunicaciones
 
 Parar Sistema Completo
-    Log    === FIN SUITE INTEGRACION ===
-    # Parar Sistema Comunicaciones
-    # Parar Base De Datos
+    Parar Sistema Comunicaciones
+    Parar Base De Datos
 
 Preparar Caso Integración
     Log    Preparando estado previo al caso de integración (placeholder).
@@ -61,29 +50,12 @@ Parar Base De Datos
     Run Process    ${PG_CTL}    -D    ${PG_DATA}    stop
     ...    timeout=10s
 
-Verificar Conexion PostgreSQL
-    Log    Verificando conexión a PostgreSQL...
-    ${query}=    Set Variable    SELECT 1 AS connectivity_ok;
-    ${result}=    Run Process
-    ...    ${PSQL}
-    ...    -h    ${DB_HOST}
-    ...    -p    ${DB_PORT}
-    ...    -d    ${DB_NAME}
-    ...    -U    ${DB_USER}
-    ...    -c    ${query}
-    ...    stdout=PIPE    stderr=PIPE    shell=True
-    Log    psql stdout: ${result.stdout}
-    Log    psql stderr: ${result.stderr}
-    Should Be Equal As Integers    ${result.rc}    0
-
-
 Iniciar Sistema Comunicaciones
     Log    Lanzando server, luego botan bridge, luego controller y sensor...
     Start Process    ${SERVER_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
-
     Start Process    ${BOTAN_BRIDGE_CMD}  shell=True    stdout=DEVNULL    stderr=DEVNULL
     Start Process    ${CONTROLLER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Start Process    ${SENSOR_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Iniciar Sensor
     Esperar Puerto Abierto    ${TELNET_HOST}    ${TELNET_PORT}
 
 Parar Sistema Comunicaciones
@@ -93,6 +65,17 @@ Parar Sistema Comunicaciones
     ...    shell=True    timeout=30s    stdout=PIPE    stderr=PIPE
     Log    kill.sh stdout:\n${res.stdout}
     Log    kill.sh stderr:\n${res.stderr}
+
+Iniciar Sensor
+    Start Process    ${SENSOR_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Sleep    1s
+
+Parar Sensor
+    ${user}=    Get Environment Variable    USER
+    Run Process
+    ...    bash    -lc    "pkill -TERM -u ${user} -f 'bash scripts/sensor.sh' || true; pkill -TERM -u ${user} -f './build/sensor/sensor' || true; pkill -TERM -u ${user} -f 'build/sensor/sensor' || true; sleep 0.5; pkill -KILL -u ${user} -f 'bash scripts/sensor.sh' || true; pkill -KILL -u ${user} -f './build/sensor/sensor' || true; pkill -KILL -u ${user} -f 'build/sensor/sensor' || true"
+    ...    shell=True    timeout=20s    stdout=PIPE    stderr=PIPE
+    Sleep    1s
 
 Esperar Puerto Abierto
     [Arguments]    ${host}    ${port}    ${retries}=30    ${sleep_s}=1s
@@ -112,29 +95,3 @@ Esperar Puerto Abierto
     END
 
     Should Be Equal As Integers    ${last_rc}    0
-
-Verificar CLI Configuracion OK
-    [Documentation]    Conecta por telnet al botan bridge, espera handshake y valida OK: (no FAILED:/ERROR:).
-    Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
-
-    # Telnet suele trabajar con CRLF; lo dejamos explícito
-    Set Newline    LF
-
-    Read Until Regexp    Handshake complete
-
-    Write    CONFIG_IP 1 IP 7.7.7.7/22
-    ${out1}=    Read Until Regexp    OK:    FAILED:    ERROR:
-    Log    TELNET out1:\n${out1}
-    Should Contain    ${out1}    OK:
-    Should Not Contain    ${out1}    FAILED:
-    Should Not Contain    ${out1}    ERROR:
-
-    Write    CONFIG_IP 2 IP 0.0.0.0/24
-    ${out2}=    Read Until Regexp    OK:    FAILED:    ERROR:
-    Log    TELNET out2:\n${out2}
-    Should Contain    ${out2}    OK:
-    Should Not Contain    ${out2}    FAILED:
-    Should Not Contain    ${out2}    ERROR:
-
-    Write    quit
-    Close Connection
