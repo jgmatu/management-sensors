@@ -1,6 +1,7 @@
 #include <db/DatabaseManager.hpp>
 #include <libpq-fe.h> // Raw libpq header
 #include <sys/epoll.h>
+#include <iostream>
 
 DatabaseManager::DatabaseManager(const std::string& connection_listener_str) 
         : conn_str_(connection_listener_str), listener_thread_(nullptr) {}

@@ -31,7 +31,7 @@ public:
     MOCK_METHOD(void, connect, (), (override));
     MOCK_METHOD(void, disconnect, (), (override));
     MOCK_METHOD(boost::json::object, get_sanity_info, (), (override));
-    MOCK_METHOD(void, listen_async,
+    MOCK_METHOD(void, register_listen_async,
         (const std::string& channel,
             std::function<void(boost::json::object)> handler),
         (override));

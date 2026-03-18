@@ -1,16 +1,15 @@
 #pragma once
 
-#include <iostream>
 #include <memory>
 #include <string>
 #include <functional>
 #include <thread>
-#include <atomic>
 
+#include <db/IDatabaseConnection.hpp>
 #include <pqxx/pqxx>
-#include <boost/json.hpp> // For JSON handling in get_sanity_info()
+#include <boost/json.hpp>
 
-class DatabaseManager {
+class DatabaseManager : public IDatabaseConnection {
 
 public:
 
@@ -47,7 +46,7 @@ public:
      * 
      * @throws std::runtime_error si la conexión falla.
      */
-    void connect();
+    void connect() override;
 
     /**
      * @brief Desconecta las conexiones activas a la base de datos.
@@ -57,7 +56,7 @@ public:
      * 
      * @throws No lanza excepciones si las conexiones ya están cerradas.
      */
-    void disconnect();
+    void disconnect() override;
 
     // Example: Execute a simple query
     void execute(const std::string& sql);
@@ -75,7 +74,7 @@ public:
      * 
      * @throws std::runtime_error si la consulta falla o no hay conexión disponible.
      */
-    boost::json::object get_sanity_info();
+    boost::json::object get_sanity_info() override;
 
     /**
      * @brief Registra un canal de escucha (LISTEN) y su manejador de eventos.
@@ -107,7 +106,7 @@ public:
      * antes de invocar 'run_listener_loop'. Una vez iniciado el hilo de escucha, el registro 
      * de nuevos canales no será aceptado y lanzará una excepción.
      */
-    void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback);
+    void register_listen_async(const std::string& channel, std::function<void(boost::json::object)> callback) override;
 
     /**
      * @brief Inicia el bucle de escucha asíncrono para recibir notificaciones de PostgreSQL.
@@ -130,7 +129,7 @@ public:
      * Intentar modificar la tabla de callbacks mientras el hilo de escucha está bloqueado 
      * en 'wait_notification' provocará una condición de carrera, deadlock o corrupción de memoria.
      */
-    void run_listener_loop();
+    void run_listener_loop() override;
 
     /**
      * @brief Sincroniza y espera la finalización del hilo de escucha.
@@ -146,7 +145,7 @@ public:
      * 
      * @warning Debe invocarse únicamente durante la fase de apagado (shutdown) del sistema.
      */
-    void join();
+    void join() override;
 
     /**
      * @brief Performs an UPSERT (Insert or Update) of the sensor's master configuration.
