@@ -1,7 +1,8 @@
 *** Settings ***
-Documentation     Pipeline E2E: DB + server + controller + sensor + CLI.
+Documentation     Pipeline E2E: DB + server + controller + sensor + CLI via botan.sh bridge (telnet).
 Library           Process
 Library           OperatingSystem
+Library           Telnet
 
 Suite Setup       Iniciar Sistema Completo
 Suite Teardown    Parar Sistema Completo
@@ -22,14 +23,18 @@ ${DB_USER}            javi
 ${SERVER_CMD}         bash scripts/server.sh
 ${CONTROLLER_CMD}     bash scripts/controller.sh
 ${SENSOR_CMD}         bash scripts/sensor.sh
-${CLI_TEST_CMD}       bash server/scripts/cli_test.sh
+
+# Telnet bridge (botan.sh abre TCP 2000 -> PTY -> botan tls_client)
+${TELNET_HOST}        127.0.0.1
+${TELNET_PORT}        2000
 ${CLI_TIMEOUT}        60s
+
+# Botan bridge
+${BOTAN_BRIDGE_CMD}  bash tests/scripts/botan.sh
 
 *** Test Cases ***
 Primer Test: CLI Devuelve OK
     Verificar CLI Configuracion OK
-
-# Aquí podrás añadir más tests E2E posteriormente
 
 *** Keywords ***
 Iniciar Sistema Completo
@@ -59,7 +64,7 @@ Parar Base De Datos
 
 Verificar Conexion PostgreSQL
     Log    Verificando conexión a PostgreSQL...
-    ${query}=    Set Variable    SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;
+    ${query}=    Set Variable    SELECT 1 AS connectivity_ok;
     ${result}=    Run Process
     ...    ${PSQL}
     ...    -h    ${DB_HOST}
@@ -73,48 +78,88 @@ Verificar Conexion PostgreSQL
     Should Be Equal As Integers    ${result.rc}    0
 
 Matar Procesos Sistema Si Existen
-    [Documentation]    Mata instancias previas de server.sh, controller.sh y sensor.sh del usuario actual.
+    [Documentation]    Mata instancias previas de server.sh, controller.sh, sensor.sh y botan.sh del usuario actual.
     ${user}=    Get Environment Variable    USER
     Log    Matando procesos previos para usuario ${user}...
 
     ${res}=    Run Process    pkill -u ${user} -f scripts/server.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill server.sh rc=${res.rc} stderr=${res.stderr}
+    Log    pkill server.sh rc=${res.rc}
 
     ${res}=    Run Process    pkill -u ${user} -f scripts/controller.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill controller.sh rc=${res.rc} stderr=${res.stderr}
+    Log    pkill controller.sh rc=${res.rc}
 
     ${res}=    Run Process    pkill -u ${user} -f scripts/sensor.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
-    Log    pkill sensor.sh rc=${res.rc} stderr=${res.stderr}
+    Log    pkill sensor.sh rc=${res.rc}
+
+    ${res}=    Run Process    pkill -u ${user} -f tests/scripts/botan.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
+    Log    pkill botan.sh rc=${res.rc}
 
 Iniciar Sistema Comunicaciones
-    Log    Lanzando server, controller y sensor desde scripts .sh...
-    Start Process    ${SERVER_CMD}        shell=True    stdout=PIPE    stderr=PIPE
-    Start Process    ${CONTROLLER_CMD}    shell=True    stdout=PIPE    stderr=PIPE
-    Start Process    ${SENSOR_CMD}        shell=True    stdout=PIPE    stderr=PIPE
+    Log    Lanzando server, luego botan bridge, luego controller y sensor...
+    Start Process    ${SERVER_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Sleep    3s
+
+    Start Process    ${BOTAN_BRIDGE_CMD}  shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Esperar Puerto Abierto    ${TELNET_HOST}    ${TELNET_PORT}
+
+    Start Process    ${CONTROLLER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Start Process    ${SENSOR_CMD}        shell=True    stdout=DEVNULL    stderr=DEVNULL
     Sleep    3s
 
 Parar Sistema Comunicaciones
-    Log    Parando server, controller y sensor...
+    Log    Parando server, controller, sensor y botan bridge...
     ${user}=    Get Environment Variable    USER
+
     Run Process    pkill -u ${user} -f scripts/server.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
     Run Process    pkill -u ${user} -f scripts/controller.sh    shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
     Run Process    pkill -u ${user} -f scripts/sensor.sh        shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
 
+    Run Process    pkill -u ${user} -f tests/scripts/botan.sh   shell=True    timeout=5s    stdout=PIPE    stderr=PIPE
+
+    # Extra: matar el listener telnet del puente si queda vivo
+    Run Process    pkill -u ${user} -f "TCP-LISTEN:${TELNET_PORT}" shell=True timeout=5s stdout=PIPE stderr=PIPE
+
+Esperar Puerto Abierto
+    [Arguments]    ${host}    ${port}    ${retries}=30    ${sleep_s}=1s
+    ${last_rc}=    Set Variable    1
+
+    FOR    ${i}    IN RANGE    ${retries}
+        ${cmd}=    Catenate    SEPARATOR=
+        ...    cat < /dev/null > /dev/tcp/${host}/${port}
+
+        ${res}=    Run Process
+        ...    bash    -lc    ${cmd}
+        ...    shell=False    stdout=PIPE    stderr=PIPE
+
+        ${last_rc}=    Set Variable    ${res.rc}
+        Exit For Loop If    ${last_rc} == 0
+        Sleep    ${sleep_s}
+    END
+
+    Should Be Equal As Integers    ${last_rc}    0
+
 Verificar CLI Configuracion OK
-    ${result}=    Run Process
-    ...    ${CLI_TEST_CMD}
-    ...    shell=True
-    ...    stdout=PIPE    stderr=PIPE
-    ...    timeout=${CLI_TIMEOUT}
-    Log    CLI stdout:\n${result.stdout}
-    Log    CLI stderr:\n${result.stderr}
+    [Documentation]    Conecta por telnet al botan bridge, espera handshake y valida OK: (no FAILED:/ERROR:).
+    Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
 
-    # 1) Si el script falla (no hay OK:), rc != 0 y el test falla.
-    Should Be Equal As Integers    ${result.rc}    0
+    # Telnet suele trabajar con CRLF; lo dejamos explícito
+    Set Newline    CRLF
 
-    # 2) Asegurar que realmente vimos un OK: en la salida
-    Should Contain    ${result.stdout}    OK:
+    Read Until Regexp    Handshake complete
 
-    # 3) Y fallar si el propio script de CLI ha reportado error en stderr
-    Should Not Contain    ${result.stderr}    did not receive an OK:
-    Should Not Contain    ${result.stderr}    Botan process is not running.
+    Write    CONFIG_IP 1 IP 7.7.7.7/22
+    ${out1}=    Read Until Regexp    OK:    FAILED:    ERROR:
+    Log    TELNET out1:\n${out1}
+    Should Contain    ${out1}    OK:
+    Should Not Contain    ${out1}    FAILED:
+    Should Not Contain    ${out1}    ERROR:
+
+    Write    CONFIG_IP 2 IP 0.0.0.0/24
+    ${out2}=    Read Until Regexp    OK:    FAILED:    ERROR:
+    Log    TELNET out2:\n${out2}
+    Should Contain    ${out2}    OK:
+    Should Not Contain    ${out2}    FAILED:
+    Should Not Contain    ${out2}    ERROR:
+
+    Write    quit
+    Close Connection
