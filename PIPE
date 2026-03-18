@@ -1,3 +1,0 @@
-Agent pid 59202
-Identity added: /home/javi/.ssh/id_ed25519 (fj.gutierrezs91@gmail.com)
-bash: línea 1: pkill -TERM -u javi -f 'bash scripts/sensor.sh' || true; pkill -TERM -u javi -f './build/sensor/sensor' || true; pkill -TERM -u javi -f 'build/sensor/sensor' || true; sleep 0.5; pkill -KILL -u javi -f 'bash scripts/sensor.sh' || true; pkill -KILL -u javi -f './build/sensor/sensor' || true; pkill -KILL -u javi -f 'build/sensor/sensor' || true: No existe el fichero o el directorio
