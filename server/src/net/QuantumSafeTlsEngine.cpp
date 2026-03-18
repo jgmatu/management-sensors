@@ -149,7 +149,7 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
     }
     catch (const std::exception& e)
     {
-        std::cout << e.what() << std::endl;
+        // std::cout << e.what() << std::endl;
         // Handle EOF or handshake failures gracefully
     }
 

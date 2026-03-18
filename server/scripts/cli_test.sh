@@ -16,28 +16,30 @@ coproc BOTAN {
 
 send_and_wait() {
     local cmd="$1"
-    
-    # Check if coproc is still running
+    local got_ok=0
     if [[ -z ${BOTAN_PID} ]]; then
         echo "Error: Botan process is not running."
         return 1
     fi
-
     echo ">>> Sending: $cmd"
-    
-    # Write to BOTAN[1] (stdin)
     echo "$cmd" >&"${BOTAN[1]}"
-
-    # Read from BOTAN[0] (stdout)
-    # We loop until we find our custom status strings
     while IFS= read -u "${BOTAN[0]}" -r line; do
         echo "Server: $line"
-
-        # Adjust these triggers to match your exact server output
+        # Si vemos OK:, marcamos éxito
+        if [[ "$line" == *"OK:"* ]]; then
+            got_ok=1
+        fi
+        # Condiciones de fin de respuesta
         if [[ "$line" == *"OK:"* ]] || [[ "$line" == *"FAILED:"* ]] || [[ "$line" == *"ERROR:"* ]]; then
             break
         fi
     done
+    # Si no se ha visto OK:, consideramos fallo
+    if [[ $got_ok -ne 1 ]]; then
+        echo "Command '$cmd' did not receive an OK: response."
+        return 1
+    fi
+    return 0
 }
 
 # --- TEST COMMANDS ---

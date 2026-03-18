@@ -146,12 +146,12 @@ void on_db_config_event_received(boost::json::object msg)
             // Extract string fields using value_to for type safety.
             std::string action   = boost::json::value_to<std::string>(payload.at("action"));
             std::string hostname = boost::json::value_to<std::string>(payload.at("hostname"));
-            std::string ip_address   = boost::json::value_to<std::string>(payload.at("ip_address"));
+            std::string new_ip   = boost::json::value_to<std::string>(payload.at("new_ip"));
 
             // Trace important fields for observability.
             std::cout << "[CONFIG-EVENT] Received Request ID: " << request_id << std::endl;
             std::cout << " > Action: " << action << " | Sensor: " << sensor_id << std::endl;
-            std::cout << " > New IP: " << ip_address << " | Hostname: " << hostname << std::endl;
+            std::cout << " > New IP: " << new_ip << " | Hostname: " << hostname << std::endl;
 
             // Signal completion of the configuration request to the waiting
             // CLI thread that originated this request_id.
@@ -281,7 +281,7 @@ int main(int argc, char* argv[])
 
         g_db = std::make_shared<DatabaseManager>(conn_str);
         g_db->connect();
-        g_db->register_listen_async("config_requested", on_db_config_event_received);
+        g_db->register_listen_async("config_events", on_db_config_event_received);
         g_db->register_listen_async("state_events", on_db_state_event_received);
         g_db->register_listen_async("error_events", on_db_error_event_received);
         g_db->run_listener_loop();
