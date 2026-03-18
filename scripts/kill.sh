@@ -1,6 +1,6 @@
 user="$USER"
 
-SLEEP_STEP=0.5
+SLEEP_STEP=0.2
 PG_CTL="/usr/local/pgsql/bin/pg_ctl"
 PG_DATA="/usr/local/pgsql/data"
 
