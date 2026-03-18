@@ -46,6 +46,7 @@ core
 *.core
 vgcore.*
 *.dSYM/
+PIPE
 
 # --- Project Specific (Testserver / Wireshark) ---
 # Ignore generated ASN.1 dissectors or temporary certs
