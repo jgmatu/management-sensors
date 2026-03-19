@@ -31,6 +31,18 @@ TEST(DispatcherTest, GenerateIdIsMonotonic)
     EXPECT_NE(id2, id3);
 }
 
+TEST(DispatcherTest, SetNextIdReseedsCounter)
+{
+    Dispatcher d;
+    d.set_next_id(42);
+
+    uint64_t id1 = d.generate_id();
+    uint64_t id2 = d.generate_id();
+
+    EXPECT_EQ(id1, 42u);
+    EXPECT_EQ(id2, 43u);
+}
+
 TEST(DispatcherTest, WaitForResponseTimesOutWhenNoDispatch)
 {
     Dispatcher d;

@@ -304,6 +304,15 @@ int main(int argc, char* argv[])
 
         g_db = std::make_shared<DatabaseManager>(conn_str);
         g_db->connect();
+        {
+            const uint64_t next_request_id = g_db->get_next_request_id_seed();
+            g_dispatcher.set_next_id(next_request_id);
+            logging::Logger::instance().info(
+                "server",
+                "[MAIN] Dispatcher request_id seed initialized to " +
+                std::to_string(next_request_id)
+            );
+        }
         g_db->register_listen_async("config_events", on_db_config_event_received);
         g_db->register_listen_async("state_events", on_db_state_event_received);
         g_db->register_listen_async("error_events", on_db_error_event_received);

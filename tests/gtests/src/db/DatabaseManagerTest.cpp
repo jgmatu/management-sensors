@@ -75,6 +75,65 @@ TEST(DatabaseManagerTest, GetSanityInfoHasBasicFields)
     db.disconnect();
 }
 
+TEST(DatabaseManagerTest, NextRequestIdSeedUsesPersistedMaxRequestId)
+{
+    const std::string conn_str = get_test_conn_str();
+    DatabaseManager db(conn_str);
+
+    try {
+        db.connect();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
+    }
+
+    // Use a high value to avoid collisions with normal test traffic.
+    const int sensor_id = 910001;
+    const int cert_id = sensor_id;
+    const uint64_t high_request_id = 900000000000ULL;
+    const std::string fingerprint = "hash_test_seed_" + std::to_string(sensor_id);
+
+    try {
+        pqxx::connection conn(conn_str);
+        pqxx::work txn(conn);
+
+        txn.exec(
+            "INSERT INTO sensor_certs (cert_id, fingerprint, common_name, pem_data) "
+            "VALUES ($1, $2, $3, $4) "
+            "ON CONFLICT (cert_id) DO NOTHING;",
+            pqxx::params{cert_id, fingerprint, "seed-test-cert", "-----BEGIN CERTIFICATE-----TEST-----END CERTIFICATE-----"}
+        );
+
+        txn.exec(
+            "INSERT INTO sensor_config (sensor_id, hostname, ip_address, is_active, cert_id, request_id) "
+            "VALUES ($1, $2, $3, $4, $5, $6) "
+            "ON CONFLICT (sensor_id) DO UPDATE SET "
+            "request_id = EXCLUDED.request_id, cert_id = EXCLUDED.cert_id;",
+            pqxx::params{sensor_id, "seed-test-sensor", "10.0.0.1", true, cert_id, high_request_id}
+        );
+
+        txn.commit();
+    } catch (const std::exception& e) {
+        db.disconnect();
+        GTEST_SKIP() << "Cannot prepare test data: " << e.what();
+    }
+
+    const uint64_t seed = db.get_next_request_id_seed();
+    EXPECT_GE(seed, high_request_id + 1)
+        << "Seed must be greater than persisted MAX(request_id).";
+
+    // Cleanup (best-effort).
+    try {
+        pqxx::connection conn(conn_str);
+        pqxx::work txn(conn);
+        txn.exec("DELETE FROM sensor_config WHERE sensor_id = $1;", pqxx::params{sensor_id});
+        txn.exec("DELETE FROM sensor_certs WHERE cert_id = $1;", pqxx::params{cert_id});
+        txn.commit();
+    } catch (...) {
+    }
+
+    db.disconnect();
+}
+
 TEST(DatabaseManagerTest, ListenerReceivesNotifyEvent)
 {
     const std::string conn_str = get_test_conn_str();

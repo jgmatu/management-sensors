@@ -21,6 +21,14 @@ uint64_t Dispatcher::generate_id()
     return id_counter.fetch_add(1, std::memory_order_relaxed);
 }
 
+void Dispatcher::set_next_id(uint64_t next_id)
+{
+    if (next_id < 1) {
+        next_id = 1;
+    }
+    id_counter.store(next_id, std::memory_order_relaxed);
+}
+
 ResponseStatus Dispatcher::wait_for_response(uint64_t id, int timeout_ms)
 {
     // Nota de seguridad: Es seguro usar la pila del hilo (stack) para 'ctx' porque su 

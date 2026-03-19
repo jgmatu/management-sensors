@@ -44,6 +44,10 @@ wait_for_db() {
 
 echo "[run.sh] Arrancando (opcional) PostgreSQL..."
 if [[ "${START_DB}" == "1" ]]; then
+    # Limpiar log previo de PostgreSQL antes de un nuevo arranque.
+    mkdir -p "$(dirname "${PG_LOGFILE}")"
+    rm -f "${PG_LOGFILE}"
+
     # Si ya está arriba, pg_ctl start normalmente no falla “duro”, pero igual no queremos romper el flujo.
     "${PG_CTL}" -D "${PG_DATA}" -l "${PG_LOGFILE}" start >/dev/null 2>&1 || true
     wait_for_db

@@ -186,6 +186,14 @@ public:
         bool is_active, u_int64_t request_id);
 
     /**
+     * @brief Returns the next durable request_id seed from database state.
+     *
+     * Computes MAX(request_id) across persistent tables and returns max + 1.
+     * Use this during process startup to keep Dispatcher IDs coherent after restarts.
+     */
+    uint64_t get_next_request_id_seed();
+
+    /**
      * @brief Performs an atomic UPSERT of the sensor's real-time telemetry data.
      * 
      * This method synchronizes the incoming MQTT telemetry with the PostgreSQL 

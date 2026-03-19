@@ -287,6 +287,40 @@ void DatabaseManager::add_pending_config(int sensor_id,
     }
 }
 
+uint64_t DatabaseManager::get_next_request_id_seed()
+{
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    if (!connection_queries_ || !connection_queries_->is_open()) {
+        throw std::runtime_error("Database connection lost.");
+    }
+
+    try
+    {
+        pqxx::work txn(*connection_queries_);
+        auto res = txn.exec(
+            "SELECT COALESCE(GREATEST("
+                "(SELECT MAX(request_id)::BIGINT FROM sensor_config_pending), "
+                "(SELECT MAX(request_id)::BIGINT FROM sensor_config)"
+            "), 0)::BIGINT + 1 AS next_request_id;"
+        );
+        txn.commit();
+
+        if (res.empty() || res[0][0].is_null()) {
+            return 1;
+        }
+        return static_cast<uint64_t>(res[0][0].as<long long>());
+    }
+    catch (const std::exception& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Failed to compute next request_id seed: " + std::string(e.what())
+        );
+        throw;
+    }
+}
+
 boost::json::object DatabaseManager::get_sanity_info()
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
@@ -319,6 +353,22 @@ boost::json::object DatabaseManager::get_sanity_info()
 
         return info;
     } 
+    catch (const pqxx::sql_error& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] SQL error: " + std::string(e.what())
+        );
+        throw;
+    }
+    catch (const pqxx::broken_connection& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Broken connection: " + std::string(e.what())
+        );
+        throw;
+    }
     catch (const std::exception& e) 
     {
         logging::Logger::instance().error(

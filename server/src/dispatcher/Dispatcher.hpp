@@ -12,6 +12,7 @@ public:
     virtual ~Dispatcher();
 
     uint64_t generate_id();
+    void set_next_id(uint64_t next_id);
 
     ResponseStatus wait_for_response(uint64_t id, int timeout_ms);
 
