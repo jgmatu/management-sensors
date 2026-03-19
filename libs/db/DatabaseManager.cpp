@@ -2,6 +2,7 @@
 #include <libpq-fe.h> // Raw libpq header
 #include <sys/epoll.h>
 #include <iostream>
+#include <log/Log.hpp>
 
 DatabaseManager::DatabaseManager(const std::string& connection_listener_str) 
         : conn_str_(connection_listener_str), listener_thread_(nullptr) {}
@@ -44,6 +45,14 @@ void DatabaseManager::connect()
             std::cout << "[DB] Database connection name: " << connection_listener_->dbname() << std::endl;
         }
     }
+    catch (const pqxx::broken_connection& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Broken connection: " + std::string(e.what())
+        );
+        throw;
+    }
     catch (const std::exception& e)
     {
         std::cerr << "Connection failed: " << e.what() << std::endl;
@@ -60,18 +69,27 @@ void DatabaseManager::disconnect()
     {
         if (connection_listener_ && connection_listener_->is_open()) 
         {
-            // Opcional: Notificar el cierre
-            std::cout << "Disconnecting from: " << connection_listener_->dbname() << std::endl;
-
             connection_listener_->close(); // Cierra la conexión física
         }
         if (connection_queries_ && connection_queries_->is_open()) 
         {
-            // Opcional: Notificar el cierre
-            std::cout << "Disconnecting from: " << connection_queries_->dbname() << std::endl;
-
             connection_queries_->close(); // Cierra la conexión física
         }
+    }
+    catch (const pqxx::broken_connection& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Broken connection: " + std::string(e.what())
+        );
+    }
+    catch (const pqxx::sql_error& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] SQL error: " + std::string(e.what())
+        );
+        throw;
     }
     catch (const std::exception& e) 
     {
@@ -107,16 +125,29 @@ void DatabaseManager::upsert_sensor_state(int sensor_id, double temp)
         txn.commit();
         std::cout << "[DB] Telemetry updated for Sensor " << sensor_id << std::endl;
     }
+    catch (const pqxx::sql_error& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] SQL error: " + std::string(e.what())
+        );
+        throw;
+    }
     catch (const pqxx::broken_connection& e)
     {
-        std::cerr << "[DB] FATAL: Connection lost (Server terminated session). " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Broken connection: " + std::string(e.what())
+        );
         // Do NOT try to call connection_listener_->... here.
         // Reset your local flags so the jthread exits cleanly.
     }
     catch (const std::exception& e)
     {
-        std::cerr << "[DB-Error] " << e.what() << std::endl;
-        throw;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Error: " + std::string(e.what())
+        );
     }
 }
 
@@ -132,25 +163,55 @@ void DatabaseManager::upsert_sensor_config(int sensor_id,
     {
         pqxx::work txn(*connection_queries_); // Or your main connection object
 
-        // UPSERT for sensor_config: Update if exists, Insert if not.
-        txn.exec(
+        // UPSERT atómico sin pedir cert_id externamente:
+        // - Si el sensor ya existe, mantiene su cert_id actual.
+        // - Si es alta inicial, intenta resolver cert_id desde sensor_certs (cert_id == sensor_id).
+        auto res = txn.exec(
             "INSERT INTO sensor_config "
-                "(sensor_id, hostname, ip_address, is_active, request_id) "
-                "VALUES ($1, $2, $3, $4, $5) "
+                "(sensor_id, hostname, ip_address, is_active, request_id, cert_id) "
+                "VALUES ("
+                "$1, $2, $3, $4, $5, "
+                "COALESCE("
+                    "(SELECT cert_id FROM sensor_config WHERE sensor_id = $1), "
+                    "(SELECT cert_id FROM sensor_certs WHERE cert_id = $1)"
+                ")"
+                ") "
                 "ON CONFLICT (sensor_id) DO UPDATE SET "
                 "hostname   = EXCLUDED.hostname, "
                 "ip_address = EXCLUDED.ip_address, "
                 "is_active  = EXCLUDED.is_active, "
-                "request_id = EXCLUDED.request_id;",
+                "request_id = EXCLUDED.request_id "
+                "RETURNING cert_id;",
             pqxx::params{sensor_id, hostname, ip, is_active, request_id}
         );
 
+        if (res.empty() || res[0][0].is_null()) {
+            throw std::runtime_error(
+                "No certificate associated with sensor " + std::to_string(sensor_id) +
+                ". Create/associate sensor_certs first."
+            );
+        }
+
         txn.commit();
-        std::cout << "[DB] Master config synced for Sensor " << sensor_id << std::endl;
+        logging::Logger::instance().debug(
+            "db",
+            "[DB] Master config synced for Sensor " + std::to_string(sensor_id)
+        );
+    }
+    catch (const pqxx::sql_error& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] SQL error: " + std::string(e.what())
+        );
+        throw;
     }
     catch (const std::exception& e)
     {
-        std::cerr << "[DB-Error] Upsert Master Config: " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Error: " + std::string(e.what())
+        );
         // Logic: You might want to throw or return a ResponseStatus::DB_ERROR here
     }
 }
@@ -172,32 +233,56 @@ void DatabaseManager::add_pending_config(int sensor_id,
     {
         pqxx::work txn(*connection_queries_);
 
-        // CORRECT LIBPQXX 8.0 SYNTAX:
-        // You must explicitly wrap your arguments in pqxx::params{}
-        // Usamos ON CONFLICT para manejar el error de duplicado (UPSERT)
         txn.exec(
-            "INSERT INTO sensor_config_pending "
-                "(sensor_id, new_hostname, new_ip_address, new_is_active, request_id) "
-                "VALUES ($1, $2, $3, $4, $5) "
-                "ON CONFLICT (sensor_id) DO UPDATE SET "
-                "new_hostname = EXCLUDED.new_hostname, "
-                "new_ip_address = EXCLUDED.new_ip_address, "
-                "new_is_active = EXCLUDED.new_is_active, "
-                "request_id = EXCLUDED.request_id, " // Sincroniza el ID de la app
-                "requested_at = NOW();", 
-            pqxx::params{sensor_id, hostname, ip, is_active, request_id}
-        );
+            "INSERT INTO sensor_config_pending ("
+                "request_id, "
+                "sensor_id, "
+                "requested_hostname, "
+                "requested_ip, "
+                "requested_is_active, "
+                "status, "
+                "requested_at"
+            ") VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW());",
+            pqxx::params{
+                request_id, // $1: request_id (BIGINT)
+                sensor_id,  // $2: sensor_id (INT)
+                hostname,   // $3: requested_hostname (VARCHAR)
+                ip,         // $4: requested_ip (INET)
+                is_active   // $5: requested_is_active (BOOLEAN)
+            }
+        );      
+
         txn.commit();
+        logging::Logger::instance().debug(
+            "db",
+            "[DB] Pending config created for Request " + std::to_string(request_id) +
+            " (Sensor " + std::to_string(sensor_id) + ")"
+        );
+        
+    }
+    catch (const pqxx::sql_error& e)
+    {
+        logging::Logger::instance().error(
+            "db",
+            "[DB] SQL error: " + std::string(e.what())
+        );
+        throw;
     }
     catch (const pqxx::broken_connection& e)
     {
-        std::cerr << "[DB] FATAL: Connection lost (Server terminated session). " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Broken connection: " + std::string(e.what())
+        );
         // Do NOT try to call connection_listener_->... here.
         // Reset your local flags so the jthread exits cleanly.
     }
     catch (const std::exception& e)
     {
-        std::cerr << "[DB-Error] " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Error: " + std::string(e.what())
+        );
         throw;
     }
 }
@@ -236,7 +321,10 @@ boost::json::object DatabaseManager::get_sanity_info()
     } 
     catch (const std::exception& e) 
     {
-        std::cerr << "[DB-Sanity] Check Failed: " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB] Error: " + std::string(e.what())
+        );
         info["error"] = e.what();
         return info;
     }
@@ -246,7 +334,10 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
-    std::cout << "[DB-Listener] Register channel: " << channel << std::endl;
+    logging::Logger::instance().debug(
+        "db",
+        "[DB-Listener] Register channel: " + std::string(channel)
+    );
 
     try 
     {
@@ -266,7 +357,10 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
         connection_listener_->listen(channel, [channel, this](const pqxx::notification& n) {
             std::function<void(boost::json::object)> handler;
 
-            std::cout << "[DB-Listener] Received listen event from channel: " << channel << std::endl;
+            logging::Logger::instance().debug(
+                "db",
+                "[DB-Listener] Received listen event from channel: " + std::string(channel)
+            );
 
             if (callbacks_.contains(channel))
             {
@@ -288,14 +382,20 @@ void DatabaseManager::register_listen_async(const std::string& channel, std::fun
             * This occurs when disconnect() is called or the DB server drops the socket.
             * We treat this as a signal to finalize the thread gracefully.
             */
-        std::cerr << "[DB-Listener] Connection closed or lost: " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB-Listener] Connection closed or lost: " + std::string(e.what())
+        );
     }
     catch (const std::exception& e) {
         /* 
             * UNEXPECTED CRITICAL ERROR:
             * Handle other logic errors (JSON parsing, bad SQL, etc.)
             */
-        std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
+        logging::Logger::instance().error(
+            "db",
+            "[DB-Listener] Unexpected error: " + std::string(e.what())
+        );
     }
 }
 
@@ -328,14 +428,20 @@ void DatabaseManager::run_listener_loop()
              * This occurs when disconnect() is called or the DB server drops the socket.
              * We treat this as a signal to finalize the thread gracefully.
              */
-            std::cerr << "[DB-Listener] Connection closed or lost: " << e.what() << std::endl;
+            logging::Logger::instance().error(
+                "db",
+                "[DB-Listener] Connection closed or lost: " + std::string(e.what())
+            );
         }
         catch (const std::exception& e) {
             /* 
              * UNEXPECTED CRITICAL ERROR:
              * Handle other logic errors (JSON parsing, bad SQL, etc.)
              */
-            std::cerr << "[DB-Listener] Unexpected error: " << e.what() << std::endl;
+             logging::Logger::instance().error(
+                "db",
+                "[DB-Listener] Unexpected error: " + std::string(e.what())
+            );
         }
     });
 }
