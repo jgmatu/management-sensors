@@ -147,7 +147,7 @@ CREATE TABLE sensor_config_pending (
     request_id          BIGINT PRIMARY KEY, -- generado por Dispatcher (aplicación)
     sensor_id           INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
     requested_hostname  VARCHAR(100),
-    requested_ip        INET,
+    requested_ip        INET NOT NULL,
     requested_is_active BOOLEAN,
     status              TEXT NOT NULL CHECK (status IN ('PENDING', 'SUCCESS', 'ERROR', 'TIMEOUT')),
     requested_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -243,11 +243,11 @@ CREATE OR REPLACE FUNCTION notify_config_request()
 RETURNS TRIGGER AS $$
 BEGIN
     PERFORM pg_notify('config_requested', json_build_object(
-            'sensor_id', NEW.sensor_id,
-            'hostname',  NEW.new_hostname,
-            'ip_address', NEW.new_ip_address,
-            'is_active', NEW.new_is_active,
             'request_id', NEW.request_id,
+            'sensor_id', NEW.sensor_id,
+            'hostname',  NEW.requested_hostname,
+            'ip_address', NEW.requested_ip,
+            'is_active', NEW.requested_is_active,
             'action',    TG_OP -- Returns 'INSERT' or 'UPDATE'
         )::text
     );
@@ -334,8 +334,89 @@ UPDATE sensor_certs SET is_revoked = TRUE WHERE cert_id = 1;
 -- ==========================================================
 -- 2. TEST: Server requests a configuration change
 -- ==========================================================
-INSERT INTO sensor_config_pending (sensor_id, new_hostname, new_ip_address, new_is_active)
-VALUES (1, 'sensor-living-01-REVISED', '192.168.1.55', TRUE);
+-- 1. Un sensor que acaba de ser solicitado (PENDING)
+INSERT INTO sensor_config_pending (
+    request_id, 
+    sensor_id, 
+    requested_hostname, 
+    requested_ip, 
+    requested_is_active, 
+    status, 
+    requested_at
+)
+VALUES (
+    111111001, 
+    1, 
+    'cpu-node-01', 
+    '192.168.1.55', 
+    TRUE, 
+    'PENDING', 
+    NOW()
+);
+
+-- 2. Un sensor que ya fue configurado con éxito (SUCCESS)
+INSERT INTO sensor_config_pending (
+    request_id, 
+    sensor_id, 
+    requested_hostname, 
+    requested_ip, 
+    requested_is_active, 
+    status, 
+    requested_at, 
+    completed_at
+) 
+VALUES (
+    111111002, 
+    2, 
+    'cpu-node-02', 
+    '192.168.1.60', 
+    TRUE, 
+    'SUCCESS', 
+    NOW() - INTERVAL '10 minutes', 
+    NOW() - INTERVAL '8 minutes'
+);
+
+-- 3. Un intento de desactivación que falló (ERROR)
+INSERT INTO sensor_config_pending (
+    request_id, 
+    sensor_id, 
+    requested_hostname, 
+    requested_ip, 
+    requested_is_active, 
+    status, 
+    requested_at, 
+    completed_at
+) 
+VALUES (
+    111111003, 
+    1, 
+    'cpu-node-01', 
+    '192.168.1.55', 
+    FALSE, 
+    'ERROR', 
+    NOW() - INTERVAL '1 hour', 
+    NOW() - INTERVAL '55 minutes'
+);
+
+-- 4. Una petición antigua que se quedó colgada (TIMEOUT)
+INSERT INTO sensor_config_pending (
+    request_id, 
+    sensor_id, 
+    requested_hostname, 
+    requested_ip, 
+    requested_is_active, 
+    status, 
+    requested_at
+) 
+VALUES (
+    1111004, 
+    3, 
+    'cpu-node-03', 
+    '192.168.1.75', 
+    TRUE, 
+    'TIMEOUT', 
+    NOW() - INTERVAL '1 day'
+);
 
 -- CHECK 1: The "pending" state should exist
 SELECT * FROM sensor_config_pending WHERE sensor_id = 1;
@@ -367,17 +448,19 @@ ORDER BY c.sensor_id ASC;
 SELECT 
     c.sensor_id AS "ID",
     c.hostname AS "Host Real",
-    -- Mostramos la IP nueva si hay una pendiente, resaltando el cambio
+    
+    -- Mostramos el cambio de IP si hay una petición pendiente
     CASE 
-        WHEN p.new_ip_address IS NOT NULL THEN c.ip_address::text || ' -> ' || p.new_ip_address::text
+        WHEN p.requested_ip IS NOT NULL AND p.requested_ip != c.ip_address 
+            THEN c.ip_address::text || ' -> ' || p.requested_ip::text
         ELSE c.ip_address::text 
     END AS "IP (Actual -> Nueva)",
 
     COALESCE(s.current_temp::text, 'N/A') AS "Temp (ºC)",
 
-    -- Estado de la comunicación
+    -- Estado de la comunicación basado en el nuevo modelo
     CASE 
-        WHEN p.sensor_id IS NOT NULL THEN '⏳ PENDIENTE'
+        WHEN p.status = 'PENDING' THEN '⏳ PENDIENTE'
         WHEN e.sensor_id IS NOT NULL THEN '❌ ERROR'
         ELSE '✅ SINCRO'
     END AS "Sincronización",
@@ -391,11 +474,20 @@ SELECT
 FROM sensor_config c
 LEFT JOIN sensor_state s ON c.sensor_id = s.sensor_id
 LEFT JOIN sensor_certs cert ON c.cert_id = cert.cert_id
--- Unimos con la tabla de pendientes para saber si hay trabajo para el MQTT
-LEFT JOIN sensor_config_pending p ON c.sensor_id = p.sensor_id
--- Unimos con el error más reciente para no duplicar filas si hay muchos errores
+
+-- Unimos solo con la última petición pendiente para evitar duplicados si hay histórico
 LEFT JOIN (
-    SELECT DISTINCT ON (sensor_id) sensor_id, error_code 
+    SELECT DISTINCT ON (sensor_id) 
+        sensor_id, requested_ip, status 
+    FROM sensor_config_pending 
+    WHERE status = 'PENDING'
+    ORDER BY sensor_id, requested_at DESC
+) p ON c.sensor_id = p.sensor_id
+
+-- Unimos con el error más reciente
+LEFT JOIN (
+    SELECT DISTINCT ON (sensor_id) 
+        sensor_id, error_code 
     FROM sensor_config_errors 
     ORDER BY sensor_id, occurred_at DESC
 ) e ON c.sensor_id = e.sensor_id
