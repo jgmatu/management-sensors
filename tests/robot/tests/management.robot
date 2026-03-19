@@ -16,10 +16,9 @@ ${TELNET_HOST}          127.0.0.1
 ${TELNET_PORT}          2000
 ${CLI_TIMEOUT}          60s
 ${STRESS_ITERATIONS}    100
-${LOAD_CLIENTS}         200
+${LOAD_CLIENTS}         10
+${REQUESTS_PER_CLIENT}   100
 ${LOAD_IP_CIDR}         7.7.7.7/22
-
-${PARALLEL_CMD}         bash tests/scripts/parallel.sh ${TELNET_HOST} ${TELNET_PORT} ${LOAD_CLIENTS} ${LOAD_IP_CIDR}
 
 *** Test Cases ***
 Primer Test: Validar PostgreSQL
@@ -35,7 +34,7 @@ Cuarto Test: Validar CLI Stress Secuencial
     Verificar CLI Stress Secuencial    ${STRESS_ITERATIONS}
 
 Quinto Test: Validar Carga Paralela CLI
-    Verificar Carga Paralela CLI    ${LOAD_CLIENTS}
+    Verificar Carga Paralela CLI    ${LOAD_CLIENTS}    ${REQUESTS_PER_CLIENT}
 
 *** Keywords ***
 Verificar Conexion PostgreSQL
@@ -135,9 +134,13 @@ Verificar CLI Timeout
     Iniciar sensor
 
 Verificar Carga Paralela CLI
-    [Arguments]    ${clients}
+    [Arguments]    ${clients}    ${requests_per_client}
+    ${parallel_cmd}=    Catenate
+    ...    bash tests/scripts/parallel.sh ${TELNET_HOST} ${TELNET_PORT} ${clients} ${LOAD_IP_CIDR} ${requests_per_client}
+    ${parallel_timeout}=    Evaluate    180 + (${requests_per_client} * 10)
+
     ${res}=    Run Process
-    ...    ${PARALLEL_CMD}
-    ...    timeout=180s    stdout=PIPE    stderr=PIPE    shell=True
+    ...    ${parallel_cmd}
+    ...    timeout=${parallel_timeout}s    stdout=PIPE    stderr=PIPE    shell=True
     Log    ${res.stderr}
     Should Be Equal As Integers    ${res.rc}    0

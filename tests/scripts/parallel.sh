@@ -5,11 +5,12 @@ HOST="$1"
 PORT="$2"
 CLIENTS="$3"
 IP_CIDR="$4"
+REQUESTS_PER_CLIENT="$5"
 
 pids=()
 for ((i=0; i<CLIENTS; i++)); do
   sensor_id=$(( (i % 2) + 1 ))
-  bash tests/scripts/shot.sh "$HOST" "$PORT" "$sensor_id" "$IP_CIDR" &
+  bash tests/scripts/shot.sh "$HOST" "$PORT" "$sensor_id" "$IP_CIDR" "$REQUESTS_PER_CLIENT" &
   pids+=( "$!" )
 done
 
