@@ -90,11 +90,11 @@ coherencia entre intención (pending), resultado (config) y observabilidad
 -- ==========================================================
 -- 1. LIMPIEZA TOTAL (DROP)
 -- ==========================================================
--- Nota: no se eliminan triggers explícitamente aquí.
--- Al eliminar las tablas asociadas, PostgreSQL elimina sus triggers de forma implícita.
+
 -- ==========================================================
 -- 2. BORRADO DE TABLAS (Orden inverso por Foreign Keys)
 -- ==========================================================
+
 -- Tablas de comunicación y estado (Dependientes)
 DROP TABLE IF EXISTS sensor_config_errors;
 DROP TABLE IF EXISTS sensor_config_pending;
@@ -103,6 +103,13 @@ DROP TABLE IF EXISTS sensor_state;
 -- Tablas base
 DROP TABLE IF EXISTS sensor_config;
 DROP TABLE IF EXISTS sensor_certs CASCADE;
+
+-- Borrado de funciones de notificación (si existen)
+DROP FUNCTION IF EXISTS notify_config_change();
+DROP FUNCTION IF EXISTS notify_state_change();
+DROP FUNCTION IF EXISTS notify_cert_change();
+DROP FUNCTION IF EXISTS notify_config_request();
+DROP FUNCTION IF EXISTS notify_config_error();
 
 -- ==========================================================
 -- 2. ESTRUCTURA DE TABLAS (DDL)
