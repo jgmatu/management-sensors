@@ -1,77 +1,97 @@
-/* 
+/*
 =============================================================================
-SISTEMA:     Infraestructura de Datos para 100 CPUs (Nodos de Computación)
-DESCRIPCIÓN: Base de Datos RELACIONAL, REACTIVA, SEGURA y DESACOPLADA
-MOTOR:       PostgreSQL 16+ (Optimizado para RHEL 10)
+SISTEMA:     Núcleo de datos para gestión de sensores
+DESCRIPCIÓN: Esquema relacional, reactivo y orientado a consistencia
+MOTOR:       PostgreSQL 16+ (RHEL 10)
 =============================================================================
 
-FUENTE DE VERDAD (SOURCE OF TRUTH):
-Esta base de datos se define como el UNICO PUNTO DE AUTORIDAD del sistema. 
-Cualquier cambio en la seguridad, red o telemetría solo se considera válido 
-una vez que ha sido persistido y validado en este esquema. El estado maestro 
-reside exclusivamente en estas tablas, eliminando configuraciones locales.
+PRINCIPIOS ARQUITECTÓNICOS DEL MODELO
+1) FUENTE DE VERDAD Y ÚNICO PUNTO DE AUTORIDAD
+   - Esta base de datos es la fuente de verdad del sistema.
+   - También es el único punto de autoridad para validar el estado de:
+     seguridad, configuración y telemetría.
+   - Ningún cambio se considera efectivo hasta quedar persistido aquí.
 
-COLA DE MENSAJES CON PERSISTENCIA (MESSAGE QUEUE ARCHITECTURE):
-El sistema utiliza PostgreSQL como una cola de mensajes persistente para 
-desacoplar el Proceso de Servicio (API) del Controlador de Sensores (MQTT):
-1. [CAPA DE COMUNICACIÓN] sensor_config_pending:
-   - Actúa como "Buffer de Intenciones". El servidor deposita aquí los cambios 
-     deseados sin necesidad de conocer el estado de conexión del sensor.
-   - Garantiza que ninguna orden se pierda ante caídas del controlador MQTT.
+2) ABSTRACCIÓN DE COLA DE MENSAJES CON PERSISTENCIA
+   - El modelo usa PostgreSQL como abstracción de cola de mensajes
+     persistente para desacoplar API/Dispatcher y Controlador MQTT.
+   - sensor_config_pending representa la intención de cambio (trabajo en cola).
+   - sensor_config_errors registra fallos asíncronos sin bloquear el flujo.
+   - Este enfoque evita pérdida de órdenes ante reinicios o caídas parciales.
 
-2. [CAPA DE RETROALIMENTACIÓN] sensor_config_errors:
-   - Almacén de fallos asíncronos. Permite al controlador reportar problemas 
-     de aplicación (timeouts, rechazos) sin bloquear el flujo principal.
+3) MODELO REACTIVO
+   - El esquema es reactivo: combina persistencia + eventos NOTIFY/LISTEN.
+   - Los canales de eventos sincronizan componentes sin polling continuo:
+     config_requested, config_errors, state_events, cert_events, config_events.
+   - Canales actuales publicados por la BD (triggers/funciones):
+     a) config_requested:
+        emitido por notify_config_request() sobre sensor_config_pending
+        en operaciones INSERT/UPDATE.
+     b) config_errors:
+        emitido por notify_config_error() sobre sensor_config_errors
+        en operaciones INSERT/UPDATE/DELETE.
+     c) state_events:
+        emitido por notify_state_change() sobre sensor_state
+        en operaciones INSERT/UPDATE.
+     d) cert_events:
+        emitido por notify_cert_change() sobre sensor_certs
+        en operaciones INSERT/UPDATE/DELETE.
+     e) config_events:
+        emitido por notify_config_change() sobre sensor_config
+        en operaciones INSERT/UPDATE/DELETE.
 
-LÓGICA RELACIONAL (Jerarquía de Datos):
-1. [CAPA DE SEGURIDAD]  sensor_certs: 
-   - Raíz de confianza y gestión de identidades X.509 (Formato PEM).
-   - Base de la pirámide: sin certificado válido, no existe nodo.
+MODELO RELACIONAL PRINCIPAL
+1) sensor_certs (seguridad)
+   - Identidad criptográfica X.509 (PEM) de cada nodo.
 
-2. [CAPA DE IDENTIDAD]   sensor_config: 
-   - Vínculo lógico-físico. Define la "Realidad Confirmada" del nodo.
-   - Representa el estado actual exitoso del sensor en la red.
+2) sensor_config (realidad confirmada)
+   - Estado operativo confirmado del sensor en red.
+   - Relación 1:1 con sensor_certs mediante cert_id UNIQUE y NOT NULL.
 
-3. [CAPA DE COMUNICACIÓN] sensor_config_pending:
-   - Capa de "Estado Deseado" (Desired State). 
-   - Relación 1:1 con sensor_config que actúa como cola de comandos.
-   - Solo existe si hay una discrepancia entre el Servidor y el Sensor.
+3) sensor_config_pending (estado deseado)
+   - Cola persistente de peticiones de configuración.
+   - Relación 1:N con sensor_config.
 
-4. [CAPA DE RETROALIMENTACIÓN] sensor_config_errors:
-   - Registro histórico de excepciones y fallos de aplicación.
-   - Relación 1:N con sensor_config para trazabilidad de problemas técnicos.
-   
-5. [CAPA DE ESTADO]      sensor_state: 
-   - Telemetría efímera (Datos operativos).
-   - Optimizado para acceso en tiempo constante (O(1)) al último valor conocido.
+4) sensor_config_errors (retroalimentación)
+   - Historial de errores por sensor/petición para trazabilidad.
+   - Relación 1:N con sensor_config.
 
-ARQUITECTURA REACTIVA (Mecanismo NOTIFY/LISTEN):
-La base de datos emite notificaciones en canales aislados para sincronización 
-inmediata, eliminando la necesidad de consultas constantes (polling):
+5) sensor_state (telemetría)
+   - Último estado observado por sensor (snapshot operativo).
 
-- config_requested: Aviso al Controlador MQTT de que hay trabajo pendiente en 'pending'.
-- config_confirmed: Aviso al Servidor de que la configuración se aplicó con éxito 
-                    (Emitido tras actualizar 'sensor_config' y limpiar 'pending').
-- config_errors:    Aviso al Servidor de que una configuración ha fallado.
-- state_events:     Actualizaciones de telemetría en tiempo real.
-- cert_events:      Eventos de seguridad y revocación de identidades.
+ABSTRACCIÓN DE LÓGICA RELACIONAL (JERARQUÍA DE DATOS)
+1) Capa de seguridad: sensor_certs
+   - Raíz criptográfica de confianza del sistema.
 
-NOTA FINAL SOBRE INTEGRIDAD:
-Implementa integridad referencial estricta. El borrado en cascada (ON DELETE CASCADE) 
-y la limpieza atómica de la tabla 'pending' tras el éxito aseguran que el sistema 
-nunca mantenga estados incoherentes entre la intención y la realidad.
+2) Capa de identidad/configuración confirmada: sensor_config
+   - Representa la realidad efectiva del sensor.
+   - Relación 1:1 con sensor_certs (cert_id UNIQUE, NOT NULL).
+
+3) Capa de comunicación/intención: sensor_config_pending
+   - Materializa la cola persistente de peticiones.
+   - Relación 1:N con sensor_config (sensor -> peticiones pendientes).
+
+4) Capa de retroalimentación de fallos: sensor_config_errors
+   - Persistencia de errores funcionales/técnicos.
+   - Relación 1:N con sensor_config (sensor -> errores).
+   - Relación 0..1 por request_id (una petición puede provocar un error).
+
+5) Capa de estado operativo: sensor_state
+   - Snapshot de telemetría actual por sensor.
+   - Relación 1:1 con sensor_config por sensor_id.
+
+INTEGRIDAD Y CONSISTENCIA
+La integridad referencial (FKs), unicidad y reglas de borrado mantienen la
+coherencia entre intención (pending), resultado (config) y observabilidad
+(errors/state), reforzando el rol de la BD como núcleo transaccional del sistema.
 =============================================================================
 */
 
 -- ==========================================================
 -- 1. LIMPIEZA TOTAL (DROP)
 -- ==========================================================
--- Borrar Triggers y Funciones
-DROP TRIGGER IF EXISTS trg_sensor_cert_notify ON sensor_certs;
-DROP TRIGGER IF EXISTS trg_sensor_config_notify ON sensor_config;
-DROP TRIGGER IF EXISTS trg_sensor_state_notify ON sensor_state;
-DROP TRIGGER IF EXISTS trg_notify_config_error ON sensor_config_errors;
-DROP TRIGGER IF EXISTS trg_notify_config_pending ON sensor_config_pending;
+-- Nota: no se eliminan triggers explícitamente aquí.
+-- Al eliminar las tablas asociadas, PostgreSQL elimina sus triggers de forma implícita.
 -- ==========================================================
 -- 2. BORRADO DE TABLAS (Orden inverso por Foreign Keys)
 -- ==========================================================
@@ -108,33 +128,42 @@ CREATE TABLE sensor_config (
     hostname       VARCHAR(100) NOT NULL,
     ip_address     INET NOT NULL,
     is_active      BOOLEAN DEFAULT TRUE,
-    cert_id        INT REFERENCES sensor_certs(cert_id) ON DELETE SET NULL,
+    -- Relación 1:1 con sensor_certs:
+    -- cada sensor tiene un único certificado y cada certificado solo puede pertenecer a un sensor.
+    cert_id        INT NOT NULL UNIQUE REFERENCES sensor_certs(cert_id) ON DELETE CASCADE,
     request_id     BIGINT
 );
 
 -- 2.3. TABLA DE CONFIGURACIÓN PENDIENTE (Órdenes de Cambio)
 -- El Servidor INSERT/UPDATE aquí. El Controlador la VACÍA tras éxito.
 CREATE TABLE sensor_config_pending (
-    sensor_id      INT PRIMARY KEY REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
-    new_hostname   VARCHAR(100),
-    new_ip_address INET,
-    new_is_active  BOOLEAN,
-    requested_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    request_id     BIGINT
+    request_id          BIGINT PRIMARY KEY, -- generado por Dispatcher (aplicación)
+    sensor_id           INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
+    requested_hostname  VARCHAR(100),
+    requested_ip        INET,
+    requested_is_active BOOLEAN,
+    status              TEXT NOT NULL CHECK (status IN ('PENDING', 'SUCCESS', 'ERROR', 'TIMEOUT')),
+    requested_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at        TIMESTAMPTZ
 );
+
+CREATE INDEX idx_config_requests_sensor_id ON sensor_config_pending (sensor_id);
+CREATE INDEX idx_config_requests_status ON sensor_config_pending (status);
 
 -- 2.5. TABLA DE ERRORES (Persistencia de fallos)
 -- Si el controlador falla, lo registra aquí. 
 -- El Servidor puede limpiar esta tabla cuando el usuario "reintenta" o "descarta" el error.
 CREATE TABLE sensor_config_errors (
-    error_id       SERIAL PRIMARY KEY,
-    sensor_id      INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
-    error_code     VARCHAR(50), 
-    error_detail   TEXT,
-    failed_config  JSONB, -- Guardamos aquí lo que se intentó para no perder el dato al borrar la pendiente
-    occurred_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    request_id     BIGINT
+    error_id        BIGSERIAL PRIMARY KEY,
+    request_id      BIGINT UNIQUE REFERENCES sensor_config_pending(request_id) ON DELETE CASCADE,
+    sensor_id       INT NOT NULL REFERENCES sensor_config(sensor_id) ON DELETE CASCADE,
+    error_code      VARCHAR(50),
+    error_detail    TEXT,
+    occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_config_errors_request_id ON sensor_config_errors (request_id);
+CREATE INDEX idx_config_errors_sensor_id ON sensor_config_errors (sensor_id);
 
 -- 2.4. TABLA DE ESTADO (Telemetría Efímera)
 CREATE TABLE sensor_state (
