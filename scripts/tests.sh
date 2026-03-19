@@ -11,6 +11,10 @@ echo "Build:  ${ROOT_DIR}/build"
 echo "==================================================="
 echo
 
+# La clase de base de datos se va a probar de ambas maneras:
+# con una base de datos de tests y realizando el mock de la clase.
+/usr/local/pgsql/bin/pg_ctl -D /usr/local/pgsql/data -l logfile restart
+
 # 1) Configurar y compilar TODO el proyecto (incluye tests)
 cmake -S "${ROOT_DIR}" -B "${ROOT_DIR}/build"
 cmake --build "${ROOT_DIR}/build"
