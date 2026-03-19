@@ -10,6 +10,6 @@ mkdir -p tests/robot/output
 # Ejecutar todas las suites Robot
 robot -d tests/robot/output tests/robot/tests
 
-sleep 1;
+sleep 0.5;
 
 bash scripts/kill.sh

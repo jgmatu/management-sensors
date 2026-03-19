@@ -16,7 +16,7 @@ ${TELNET_HOST}          127.0.0.1
 ${TELNET_PORT}          2000
 ${CLI_TIMEOUT}          60s
 ${STRESS_ITERATIONS}    100
-${LOAD_CLIENTS}         100
+${LOAD_CLIENTS}         200
 ${LOAD_IP_CIDR}         7.7.7.7/22
 
 ${PARALLEL_CMD}         bash tests/scripts/parallel.sh ${TELNET_HOST} ${TELNET_PORT} ${LOAD_CLIENTS} ${LOAD_IP_CIDR}
