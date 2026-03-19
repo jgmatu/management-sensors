@@ -287,9 +287,6 @@ int main(int argc, char* argv[])
         QuantumSafeTlsEngine server(port, certificate, key, policy,
             ocsp_cache_time,ocsp_request_timeout);
 
-        server.set_processor(on_tls_message_process);
-        server.initialize();
-
         // Build the connection string with TCP Keep-Alive parameters
         std::string conn_str = 
             "dbname=javi "
@@ -320,6 +317,10 @@ int main(int argc, char* argv[])
 
         boost::json::object sanity_info = g_db->get_sanity_info();
         logging::Logger::instance().info("server", JsonUtils::toString(sanity_info));
+
+        // No iniciar el servidor hasta que se haya configurado la base de datos.
+        server.set_processor(on_tls_message_process);
+        server.initialize();
 
         server.join();
         server.stop();
