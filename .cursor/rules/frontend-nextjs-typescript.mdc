@@ -1,0 +1,23 @@
+---
+description: Next.js and TypeScript frontend conventions
+globs: **/*.{ts,tsx,js,jsx}
+alwaysApply: false
+---
+
+# Frontend Next.js + TypeScript Standards
+
+Apply these rules when editing frontend code.
+
+- Use strict typing and keep interfaces aligned with backend C++ payloads/JSON.
+- Separate business logic from presentation:
+  - logic in hooks/services
+  - UI in components
+- Prefer App Router patterns and keep data flow explicit.
+- Use Server Actions for server-side data mutations/fetching where appropriate.
+- Use WebSocket/Fetch patterns consistently for real-time sensor data.
+
+## Quality Expectations
+
+- Keep component boundaries clear and avoid leaking transport details into UI.
+- Add/update tests when behavior or contracts change.
+- Favor small, maintainable refactors over broad rewrites.

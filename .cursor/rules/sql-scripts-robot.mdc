@@ -1,0 +1,24 @@
+---
+description: SQL, shell scripts, and Robot integration standards
+globs: **/*.{sql,sh,robot,resource}
+alwaysApply: false
+---
+
+# SQL + Scripts + Robot Standards
+
+Apply these rules when editing database DDL, shell scripts, and Robot tests.
+
+- Keep database design intent explicit in comments: reactive model, DB as source
+  of truth, and persistent message-queue abstraction.
+- Preserve relational coherence when changing schema (FKs, cardinalities,
+  indices, and trigger/channel alignment).
+- Keep SQL initialization idempotent where possible (`IF EXISTS`,
+  deterministic drop/create order).
+- In shell scripts, prefer safe defaults and clear startup/cleanup behavior
+  (`set -euo pipefail`, bounded waits, predictable logs).
+
+## Integration Testing Expectations
+
+- For cross-process changes, add or update Robot tests under `tests/robot/`.
+- Ensure scripts used by tests remain aligned with test parameters and timeouts.
+- Keep failure output actionable for CI and local debugging.

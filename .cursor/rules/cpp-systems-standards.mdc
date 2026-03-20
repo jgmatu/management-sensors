@@ -1,0 +1,27 @@
+---
+description: C/C++ standards for distributed sensor stack
+globs: **/*.{hpp,h,cpp,cc,cxx}
+alwaysApply: false
+---
+
+# C/C++ Systems Standards
+
+Apply these rules when editing C/C++ in controller, server, proxy, or sensor.
+
+- Use RAII and smart pointers (`std::unique_ptr`, `std::shared_ptr`); avoid raw
+  `new/delete`.
+- Keep naming consistent: `PascalCase` for classes, `snake_case` for methods
+  and variables, `kUpperCase` for constants.
+- Use `#pragma once` in headers.
+- Keep processes decoupled and preserve the communication boundaries between
+  `sensor`, `proxy`, `server`, and `controller`.
+- Use project logging conventions consistently so runtime traces are useful for
+  system validation and debugging.
+
+## Testing Requirements
+
+- If C++ logic changes, update/add corresponding Google Test coverage in
+  `tests/gtests/`.
+- If the change affects process interaction, add or update a Robot Framework
+  integration test in `tests/robot/`.
+- Treat missing tests as incomplete work.
