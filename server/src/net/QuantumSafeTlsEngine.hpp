@@ -19,12 +19,10 @@
 
 #include <oscp/ocsp_cache.hpp>
 
-namespace beast = boost::beast;    // from <boost/beast.hpp>
-namespace net = boost::asio;       // from <boost/asio.hpp>
-using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
-
-using tcp_stream = typename beast::tcp_stream::rebind_executor<
-    net::use_awaitable_t<>::executor_with_default<net::any_io_executor>>::other;
+using beast_tcp_stream_with_default_awaitable_executor =
+    typename boost::beast::tcp_stream::rebind_executor<
+        boost::asio::use_awaitable_t<>::executor_with_default<
+            boost::asio::any_io_executor>>::other;
 
 class Basic_Credentials_Manager final : public Botan::Credentials_Manager
 {
@@ -244,7 +242,7 @@ private:
         make_final_completion_handler(const std::string& context);
 
     boost::asio::awaitable<void> do_session(
-        tcp_stream stream,
+        beast_tcp_stream_with_default_awaitable_executor stream,
         std::shared_ptr<Botan::TLS::Context> ctx,
         std::shared_ptr<OCSP_Cache> ocsp_cache);
 

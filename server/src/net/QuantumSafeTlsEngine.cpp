@@ -1,8 +1,10 @@
 #include "QuantumSafeTlsEngine.hpp"
 #include <fstream>
 
-using tcp_stream = typename boost::beast::tcp_stream::rebind_executor<
-    boost::asio::use_awaitable_t<>::executor_with_default<boost::asio::any_io_executor>>::other;
+using beast_tcp_stream_with_default_awaitable_executor =
+    typename boost::beast::tcp_stream::rebind_executor<
+        boost::asio::use_awaitable_t<>::executor_with_default<
+            boost::asio::any_io_executor>>::other;
 
 /**
  * @brief Constructor inicializando el puerto por defecto.
@@ -98,7 +100,7 @@ void QuantumSafeTlsEngine::stop()
 }
 
 boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
-    tcp_stream stream,
+    beast_tcp_stream_with_default_awaitable_executor stream,
     std::shared_ptr<Botan::TLS::Context> ctx,
     std::shared_ptr<OCSP_Cache> ocsp_cache)
 {
@@ -108,7 +110,8 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
     auto callbacks = std::make_shared<TlsHttpCallbacks>(ocsp_cache);
 
     // Botan::Stream has a constructor that takes the Context directly
-    Botan::TLS::Stream<tcp_stream&> tls_stream(stream, ctx, callbacks);
+    Botan::TLS::Stream<beast_tcp_stream_with_default_awaitable_executor&> tls_stream(
+        stream, ctx, callbacks);
 
     try
     {
@@ -181,7 +184,10 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_listen(
         // 4. Spawn the session using the retrieved executor 'exec'
         boost::asio::co_spawn(
             exec,
-            do_session(tcp_stream(std::move(socket)), tls_ctx, ocsp_cache),
+            do_session(
+                beast_tcp_stream_with_default_awaitable_executor(std::move(socket)),
+                tls_ctx,
+                ocsp_cache),
             make_final_completion_handler("session")
         );
     }
