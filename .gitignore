@@ -29,6 +29,7 @@ compile_commands.json
 .cursor/
 .cursor/*
 !.cursor/rules/
+!.cursor/rules/**
 !.cursor/skills-cursor/
 *.swp
 *.swo
