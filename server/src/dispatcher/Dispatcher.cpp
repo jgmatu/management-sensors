@@ -2,6 +2,7 @@
 #include <iostream>
 #include <condition_variable>
 #include <chrono>
+#include <log/Log.hpp>
 
 struct Dispatcher::RequestContext {
     std::condition_variable cv;
@@ -13,6 +14,17 @@ struct Dispatcher::RequestContext {
 Dispatcher::Dispatcher() :
     id_counter(1)
 {}
+
+std::string Dispatcher::status_to_string(ResponseStatus status) {
+    switch (status) {
+        case ResponseStatus::SUCCESS:      return "SUCCESS";
+        case ResponseStatus::TIMEOUT:      return "ERROR: Request Timed Out";
+        case ResponseStatus::DB_ERROR:     return "ERROR: Database Failure";
+        case ResponseStatus::SYSTEM_FULL:  return "ERROR: Maximum Pending Requests Reached";
+        case ResponseStatus::PENDING:      return "PENDING";
+        default:                           return "UNKNOWN_ERROR";
+    }
+}
 
 Dispatcher::~Dispatcher() {}
 
@@ -46,11 +58,14 @@ ResponseStatus Dispatcher::wait_for_response(uint64_t id, int timeout_ms)
     }
 
     pending_requests[id] = &ctx;
+    logging::Logger::instance().info("dispatcher", 
+        "Waiting for response for id: " + std::to_string(id));
     bool triggered = ctx.cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&] { return ctx.ready; });
 
     ResponseStatus final_status = triggered ? ctx.status : ResponseStatus::TIMEOUT;
     pending_requests.erase(id);
-
+    logging::Logger::instance().info("dispatcher", 
+        "Response for id: " + std::to_string(id) + " is: " + status_to_string(final_status));
     return final_status;
 }
 
@@ -59,7 +74,8 @@ void Dispatcher::dispatch(uint64_t id, ResponseStatus status)
     std::lock_guard<std::mutex> lock(map_mtx);
 
     std::unordered_map<uint64_t, RequestContext*>::iterator it = pending_requests.find(id);
-
+    logging::Logger::instance().info("dispatcher", 
+        "Dispatching response for id: " + std::to_string(id) + " is: " + status_to_string(status));
     if (it != pending_requests.end())
     {
         it->second->status = status;

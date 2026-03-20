@@ -15,6 +15,7 @@ add_executable(dispatcher_tests
 
 target_include_directories(dispatcher_tests
     PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../common
         ${CMAKE_CURRENT_SOURCE_DIR}/../../server/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

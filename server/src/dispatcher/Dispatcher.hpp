@@ -2,6 +2,7 @@
 #include <mutex>
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 enum class ResponseStatus { PENDING, SUCCESS, TIMEOUT, DB_ERROR, SYSTEM_FULL };
 
@@ -20,6 +21,8 @@ public:
 
 private:
     struct RequestContext;
+
+    static std::string status_to_string(ResponseStatus status);
 
     std::mutex map_mtx;
     std::unordered_map<uint64_t, RequestContext*> pending_requests;
