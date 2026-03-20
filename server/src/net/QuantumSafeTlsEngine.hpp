@@ -4,6 +4,7 @@
 #include <string>
 #include <iostream>
 #include <thread>
+#include <mutex>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -18,6 +19,11 @@
 #include <botan/version.h>
 
 #include <oscp/ocsp_cache.hpp>
+
+#include <log/Log.hpp>
+#include <net/IQuantumConnDetailsProvider.hpp>
+
+class QuantumSafeHttp;
 
 using beast_tcp_stream_with_default_awaitable_executor =
     typename boost::beast::tcp_stream::rebind_executor<
@@ -144,8 +150,13 @@ class TlsHttpCallbacks final : public Botan::TLS::StreamCallbacks
  * @brief Motor TLS preparado para algoritmos post-cuánticos (PQC).
  * Diseñado para gestionar políticas híbridas y contextos de Botan 3.
  */
-class QuantumSafeTlsEngine {
+class QuantumSafeTlsEngine : public IQuantumConnDetailsProvider {
 public:
+    enum class SessionMode
+    {
+        Raw,
+        Http
+    };
     /**
      * @brief Constructor for the QuantumSafeTlsEngine.
      * 
@@ -234,6 +245,11 @@ public:
         processor_ = std::move(proc);
     }
 
+    std::string get_latest_connection_details() const override;
+    void set_session_mode(SessionMode mode);
+    void set_http_handler(std::shared_ptr<QuantumSafeHttp> http_handler,
+                          std::string document_root);
+
 private:
     std::shared_ptr<Botan::TLS::Policy> load_tls_policy(
         const std::string& policy_type);
@@ -274,4 +290,16 @@ private:
     boost::asio::ip::tcp::endpoint endpoint_;
     std::unique_ptr<boost::asio::io_context> io_context_; 
     std::vector<std::jthread> thread_pool_;
+    SessionMode session_mode_{SessionMode::Raw};
+    std::shared_ptr<QuantumSafeHttp> http_handler_;
+    std::string document_root_;
+
+    /*
+     * Mutex and string to store the latest connection details.
+     * This is used to provide the connection details to the HTTP server.
+     * It is mutable because it is accessed from the HTTP server thread.
+     * It is a string because it is the format of the connection details.
+     */
+    mutable std::mutex connection_details_mutex_;
+    std::string latest_connection_details_ = "{}";
 };

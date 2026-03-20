@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME}
     src/json/JsonUtils.cpp
     src/dispatcher/Dispatcher.cpp
     src/cli/SensorCommandCli.cpp
+    src/http/QuantumSafeHttp.cpp
     src/net/QuantumSafeTlsEngine.cpp
     src/main.cpp
 )

@@ -1,5 +1,10 @@
-#include "QuantumSafeTlsEngine.hpp"
 #include <fstream>
+
+#include <net/QuantumSafeTlsEngine.hpp>
+#include <http/QuantumSafeHttp.hpp>
+#include <log/Log.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
 
 using beast_tcp_stream_with_default_awaitable_executor =
     typename boost::beast::tcp_stream::rebind_executor<
@@ -58,19 +63,18 @@ void QuantumSafeTlsEngine::initialize()
             });
         }
 
-        std::cout << "[PQC-Engine] server ready (Running in background)" << std::endl;
-        // No io_context_->run() here! The function returns immediately.
+        logging::Logger::instance().info("tls-engine", "Server ready (Running in background)");
     }
     catch (const std::exception& e) 
     {
-        std::cerr << "[PQC-Engine] Initialization failed: " << e.what() << std::endl;
+        logging::Logger::instance().error("tls-engine", "Initialization failed: " + std::string(e.what()));
         throw;
     }
 }
 
 void QuantumSafeTlsEngine::join()
 {
-    std::cout << "[PQC-Engine] Main thread now waiting for server threads..." << std::endl;
+    logging::Logger::instance().info("tls-engine", "Main thread now waiting for server threads...");
     
     for (auto& thread : thread_pool_) 
     {
@@ -80,12 +84,12 @@ void QuantumSafeTlsEngine::join()
         }
     }
 
-    std::cout << "[PQC-Engine] All threads joined. Process can now exit." << std::endl;
+    logging::Logger::instance().info("tls-engine", "All threads joined. Process can now exit.");
 }
 
 void QuantumSafeTlsEngine::stop()
 {
-    std::cout << "SERVER SHUTDOWN!" << std::endl;
+    logging::Logger::instance().info("tls-engine", "Server shutdown requested");
 
     // 1. Terminate the event loop
     if (io_context_) {
@@ -95,8 +99,7 @@ void QuantumSafeTlsEngine::stop()
     // 2. Cleanup threads
     // jthreads join automatically, but clear() ensures order
     thread_pool_.clear(); 
-    
-    std::cout << "[PQC-Engine] Orchestrated shutdown complete." << std::endl;
+    logging::Logger::instance().info("tls-engine", "Orchestrated shutdown complete");
 }
 
 boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
@@ -118,10 +121,16 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
         co_await tls_stream.async_handshake(Botan::TLS::Connection_Side::Server);
 
         // Log connection details once (optional)
-        std::cout << callbacks->collect_connection_details_as_json() << std::endl;
+        const auto connection_details = callbacks->collect_connection_details_as_json();
+        {
+            std::lock_guard<std::mutex> lock(connection_details_mutex_);
+            latest_connection_details_ = connection_details;
+        }
+        logging::Logger::instance().info("tls-engine", "Connection details: " + connection_details);
 
-        // TCP LAYER: Read/Write Loop
-        std::vector<uint8_t> buffer(BUFFER_SIZE);
+        boost::beast::flat_buffer http_buffer;
+        std::vector<uint8_t> raw_buffer(BUFFER_SIZE);
+        const bool use_http_mode = (session_mode_ == SessionMode::Http && http_handler_);
         for (;;)
         {
             // Set the timeout.
@@ -129,25 +138,49 @@ boost::asio::awaitable<void> QuantumSafeTlsEngine::do_session(
             tls_stream.next_layer().expires_after(std::chrono::seconds(30));
 #endif
 
-            // Read raw decrypted bytes
-            size_t n = co_await tls_stream.async_read_some(boost::asio::buffer(buffer));
-
-              // 2. PROCESS: Modify/Generate response using the handler
-            std::vector<uint8_t> response;
-            if (processor_)
+            if (use_http_mode)
             {
-                // Slice the buffer to match only the received 'n' bytes
-                std::vector<uint8_t> incoming(buffer.begin(), buffer.begin() + n);
-                response = processor_(incoming);
-            }
+                boost::beast::http::request<boost::beast::http::string_body> req;
+                co_await boost::beast::http::async_read(tls_stream, http_buffer, req);
 
-            // 3. WRITE: Send the processed response back
-            if (!response.empty())
-            {
-                response.push_back('\n'); 
-                co_await tls_stream.async_write_some(boost::asio::buffer(response));
+                auto response = req.target().starts_with("/api")
+                                    ? http_handler_->handle_api_request(std::move(req))
+                                    : http_handler_->handle_request(
+                                          std::move(req), document_root_);
+
+                const auto keep_alive = response.keep_alive();
+                co_await boost::beast::async_write(
+                    tls_stream, std::move(response), boost::asio::use_awaitable);
+                if (!keep_alive)
+                {
+                    break;
+                }
             }
-            std::copy(buffer.begin(), buffer.end(), std::ostream_iterator< char>(std::cout, ""));
+            else
+            {
+                // Read raw decrypted bytes
+                size_t n =
+                    co_await tls_stream.async_read_some(boost::asio::buffer(raw_buffer));
+
+                std::vector<uint8_t> response;
+                if (processor_)
+                {
+                    std::vector<uint8_t> incoming(
+                        raw_buffer.begin(), raw_buffer.begin() + n);
+                    response = processor_(incoming);
+                }
+
+                if (!response.empty())
+                {
+                    response.push_back('\n');
+                    co_await tls_stream.async_write_some(
+                        boost::asio::buffer(response));
+                }
+                std::copy(
+                    raw_buffer.begin(),
+                    raw_buffer.end(),
+                    std::ostream_iterator<char>(std::cout, ""));
+            }
         }
     }
     catch (const std::exception& e)
@@ -222,9 +255,26 @@ std::function<void(std::exception_ptr)> QuantumSafeTlsEngine::make_final_complet
                 const std::time_t t_c = std::chrono::system_clock::to_time_t(now);
                 
                 // Nota: std::ctime añade un salto de línea al final
-                std::cerr << std::ctime(&t_c) << " " << context << ": "
-                          << ex.what() << std::endl;
+                logging::Logger::instance().error("tls-engine", "Error in " + context + ": " + ex.what());
             }
         }
     };
+}
+
+std::string QuantumSafeTlsEngine::get_latest_connection_details() const
+{
+    std::lock_guard<std::mutex> lock(connection_details_mutex_);
+    return latest_connection_details_;
+}
+
+void QuantumSafeTlsEngine::set_session_mode(SessionMode mode)
+{
+    session_mode_ = mode;
+}
+
+void QuantumSafeTlsEngine::set_http_handler(
+    std::shared_ptr<QuantumSafeHttp> http_handler, std::string document_root)
+{
+    http_handler_ = std::move(http_handler);
+    document_root_ = std::move(document_root);
 }

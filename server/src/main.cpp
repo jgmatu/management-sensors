@@ -16,6 +16,7 @@
 
 
 #include <db/DatabaseManager.hpp>
+#include <http/QuantumSafeHttp.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
 #include <dispatcher/Dispatcher.hpp>
@@ -27,6 +28,19 @@
 // Global database handle shared between TLS engine worker threads and main.
 std::shared_ptr<DatabaseManager> g_db;
 Dispatcher g_dispatcher;
+
+QuantumSafeTlsEngine::SessionMode parse_session_mode(const std::string& mode)
+{
+    if (mode == "http")
+    {
+        return QuantumSafeTlsEngine::SessionMode::Http;
+    }
+    if (mode == "raw")
+    {
+        return QuantumSafeTlsEngine::SessionMode::Raw;
+    }
+    throw std::runtime_error("Invalid mode: " + mode + ". Use 'raw' or 'http'.");
+}
 
 // Helper to convert status to human-readable string
 std::string status_to_string(ResponseStatus status) {
@@ -243,6 +257,7 @@ int main(int argc, char* argv[])
         ("policy", boost::program_options::value<std::string>()->default_value("default"), "Botan policy file (default: Botan's default policy)")
         ("cert", boost::program_options::value<std::string>()->required(), "Path to the server's certificate chain")
         ("key", boost::program_options::value<std::string>()->required(), "Path to the server's certificate private key file")
+        ("mode", boost::program_options::value<std::string>()->default_value("raw"), "Session mode: raw | http")
         ("ocsp-request-timeout", boost::program_options::value<uint64_t>()->default_value(10), "OCSP request timeout in seconds")
         ("ocsp-cache-time", boost::program_options::value<uint64_t>()->default_value(6 * 60), "Cache validity time for OCSP responses in minutes")
         ("document-root", boost::program_options::value<std::string>()->default_value("webroot"), "Path to the server's static documents folder");
@@ -271,6 +286,7 @@ int main(int argc, char* argv[])
     logging::Logger::instance().info("server", "Policy: " + vm["policy"].as<std::string>());
     logging::Logger::instance().info("server", "Certificate: " + vm["cert"].as<std::string>());
     logging::Logger::instance().info("server", "Key: " + vm["key"].as<std::string>());
+    logging::Logger::instance().info("server", "Mode: " + vm["mode"].as<std::string>());
     logging::Logger::instance().info("server", "OCSP request timeout: " + std::to_string(vm["ocsp-request-timeout"].as<uint64_t>()));
     logging::Logger::instance().info("server", "OCSP cache time: " + std::to_string(vm["ocsp-cache-time"].as<uint64_t>()));
     logging::Logger::instance().info("server", "Document root: " + vm["document-root"].as<std::string>());
@@ -282,10 +298,22 @@ int main(int argc, char* argv[])
         const auto policy = vm["policy"].as<std::string>();
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
+        const auto mode = vm["mode"].as<std::string>();
+        const auto session_mode = parse_session_mode(mode);
         const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
         const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
-        QuantumSafeTlsEngine server(port, certificate, key, policy,
-            ocsp_cache_time,ocsp_request_timeout);
+        const auto document_root = vm["document-root"].as<std::string>();
+
+        auto server = std::make_shared<QuantumSafeTlsEngine>(
+            port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
+
+        if (session_mode == QuantumSafeTlsEngine::SessionMode::Http)
+        {
+            auto http_handler = std::make_shared<QuantumSafeHttp>(
+                std::static_pointer_cast<IQuantumConnDetailsProvider>(server));
+            server->set_http_handler(http_handler, document_root);
+        }
+        server->set_session_mode(session_mode);
 
         // Build the connection string with TCP Keep-Alive parameters
         std::string conn_str = 
@@ -319,10 +347,10 @@ int main(int argc, char* argv[])
         logging::Logger::instance().info("server", JsonUtils::toString(sanity_info));
 
         // No iniciar el servidor hasta que se haya configurado la base de datos.
-        server.set_processor(on_tls_message_process);
-        server.initialize();
-        server.join();
-        server.stop();
+        server->set_processor(on_tls_message_process);
+        server->initialize();
+        server->join();
+        server->stop();
 
         g_db.reset();
     }
