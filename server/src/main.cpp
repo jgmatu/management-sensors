@@ -321,9 +321,9 @@ int main(int argc, char* argv[])
         // No iniciar el servidor hasta que se haya configurado la base de datos.
         server.set_processor(on_tls_message_process);
         server.initialize();
-
         server.join();
         server.stop();
+
         g_db.reset();
     }
     catch (const std::exception& ex)
