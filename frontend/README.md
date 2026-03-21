@@ -1,22 +1,23 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Private UI & auth entry
+
+- **`pnpm dev` / `pnpm build`** run `scripts/setup-components.sh`, which:
+  1. Ensures `../private/components/auth/` exists and seeds **`AuthLayout.tsx`** / **`AuthPageTemplate.tsx`** from `auth-seed/` if those files are not already in `private/`.
+  2. Copies **`../private/components/`** → **`src/components/`** (full sync).
+- The **landing route** is **`/`** — empty authentication shell (`src/app/(auth)/`) using the layout/template from `private/components/auth/` (via the copy).
+- The **dashboard** lives under **`(dashboard)/`** (e.g. `/sensors/`). You still need the rest of your Catalyst / proprietary components under `../private/components/` for those routes to build.
+
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000/](http://localhost:3000/) — you should see the empty auth template first.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can edit the auth shell in **`private/components/auth/`** (or the tracked defaults under **`auth-seed/`** before first copy).
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

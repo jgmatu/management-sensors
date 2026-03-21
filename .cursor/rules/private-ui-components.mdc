@@ -9,6 +9,7 @@ alwaysApply: false
 The `private/` directory contains proprietary UI components for the Next.js
 frontend application. This folder is excluded from version control.
 
+- **Authentication shell**: `private/components/auth/` (`AuthLayout`, `AuthPageTemplate`) — seeded from `frontend/auth-seed/` on first `pnpm dev` if missing.
 - When looking for UI components (buttons, layouts, charts, dashboards, forms,
   etc.), search `private/` first before creating new ones.
 - Import paths from `private/` should use relative imports or a path alias

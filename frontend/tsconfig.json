@@ -39,6 +39,7 @@
     "webroot/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "auth-seed"
   ]
 }
