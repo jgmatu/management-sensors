@@ -3,7 +3,6 @@
 #include <chrono>
 
 #include <dispatcher/Dispatcher.hpp>
-#include "../TestUtils.hpp"
 
 // Helper: convert ResponseStatus to string for ASSERT messages
 static const char* status_to_cstr(ResponseStatus s)
@@ -98,8 +97,6 @@ TEST(DispatcherTest, DispatchForUnknownIdDoesNothing)
 
 TEST(DispatcherTest, ReturnsSystemFullWhenTooManyPending)
 {
-    ScopedStreamSilencer silence_out(std::cout);
-    ScopedStreamSilencer silence_err(std::cerr);
     Dispatcher d;
     // MAX_PENDING en Dispatcher es 10000; usamos un margen amplio
     const int warmup = 10;

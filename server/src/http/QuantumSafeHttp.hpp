@@ -7,15 +7,31 @@
 #include <string>
 #include <string_view>
 
-#include <net/IQuantumConnDetailsProvider.hpp>
+#include <net/IConnDetailsProvider.hpp>
+#include <net/ISessionHandler.hpp>
 
-class QuantumSafeHttp
+class Dispatcher;
+class DatabaseManager;
+enum class ResponseStatus;
+
+class QuantumSafeHttp : public ISessionHandler
 {
 public:
     explicit QuantumSafeHttp(
-        std::shared_ptr<IQuantumConnDetailsProvider> connection_details_provider =
-            nullptr);
+        std::shared_ptr<IConnDetailsProvider> connection_details_provider =
+            nullptr,
+        std::string document_root = {},
+        Dispatcher* dispatcher = nullptr,
+        std::shared_ptr<DatabaseManager> db = nullptr);
 
+    boost::asio::awaitable<void> handle_session(TlsStream& stream) override;
+
+    void set_connection_details_provider(
+        std::shared_ptr<IConnDetailsProvider> provider);
+
+    void set_document_root(std::string document_root);
+
+private:
     using Request = boost::beast::http::request<
             boost::beast::http::string_body,
             boost::beast::http::basic_fields<std::allocator<char>>>;
@@ -25,11 +41,8 @@ public:
         boost::beast::string_view doc_root);
 
     boost::beast::http::message_generator handle_api_request(Request&& req);
+    boost::beast::http::message_generator handle_config_ip(const Request& req);
 
-    void set_connection_details_provider(
-        std::shared_ptr<IQuantumConnDetailsProvider> provider);
-
-private:
     static boost::beast::string_view mime_type(boost::beast::string_view path);
     static std::string path_cat(
         boost::beast::string_view base,
@@ -55,6 +68,12 @@ private:
         boost::beast::http::file_body::value_type file,
         std::string_view content_type);
 
-    std::shared_ptr<IQuantumConnDetailsProvider> connection_details_provider_;
-    std::string doc_root_{};
+    static std::string status_to_string(ResponseStatus status);
+
+    std::shared_ptr<IConnDetailsProvider> connection_details_provider_;
+    std::string document_root_;
+    Dispatcher* dispatcher_{nullptr};
+    std::shared_ptr<DatabaseManager> db_;
+
+    static constexpr int REQUEST_TIMEOUT_MS = 2000;
 };

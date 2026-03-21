@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # Listener telnet
 TCP_PORT=2000
-LOG_FILE="/tmp/botan_cli_bridge.log"
+LOG_FILE="${REPO_ROOT}/logs/botan_cli_bridge.log"
 
 # Botan TLS client target (tu server TLS)
 BOTAN_HOST="localhost"

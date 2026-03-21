@@ -1,20 +1,15 @@
 *** Settings ***
-Documentation     Pipeline E2E: DB + server + controller + sensor + CLI via botan.sh bridge (telnet).
+Documentation     Pipeline E2E: CLI via botan.sh bridge (telnet) en modo raw.
 Library           Process
 Library           OperatingSystem
 Library           Telnet
 Resource          ../resources/common.resource
 
-Suite Setup       Iniciar Sistema Completo
-Suite Teardown    Parar Sistema Completo
+Suite Setup       Iniciar Modo Raw
+Suite Teardown    Parar Modo Raw
 Test Setup        Preparar Caso Integración
 
 *** Variables ***
-
-# Telnet bridge (botan.sh abre TCP 2000 -> PTY -> botan tls_client)
-${TELNET_HOST}          127.0.0.1
-${TELNET_PORT}          2000
-${CLI_TIMEOUT}          60s
 ${STRESS_ITERATIONS}    100
 ${LOAD_CLIENTS}         10
 ${REQUESTS_PER_CLIENT}   100
@@ -37,6 +32,14 @@ Quinto Test: Validar Carga Paralela CLI
     Verificar Carga Paralela CLI    ${LOAD_CLIENTS}    ${REQUESTS_PER_CLIENT}
 
 *** Keywords ***
+Iniciar Modo Raw
+    Iniciar Servidor Raw
+    Iniciar Bridge
+
+Parar Modo Raw
+    Parar Bridge
+    Parar Servidor
+
 Verificar Conexion PostgreSQL
     ${query}=    Set Variable    SELECT now() AS server_time, version() AS postgres_version, inet_server_addr() AS server_ip, inet_server_port() AS server_port, pg_is_in_recovery() AS in_recovery, current_setting('server_version_num') AS version_num;
 
@@ -54,10 +57,8 @@ Verificar Conexion PostgreSQL
     Should Be Equal As Integers    ${result.rc}    0
 
 Verificar CLI Configuracion OK
-    [Documentation]    Conecta por telnet al botan bridge, espera handshake y valida OK: (no FAILED:/ERROR:).
+    [Documentation]    Conecta por telnet al botan bridge, espera handshake y valida OK:.
     Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
-
-    # Telnet suele trabajar con CRLF; lo dejamos explícito
     Set Newline    LF
 
     Read Until Regexp    Handshake complete
@@ -81,7 +82,7 @@ Verificar CLI Configuracion OK
 
 Verificar CLI Stress Secuencial
     [Arguments]    ${iterations}
-    [Documentation]    Ejecuta CONFIG_IP ${iterations} veces secuencialmente por el mismo telnet connection.
+    [Documentation]    Ejecuta CONFIG_IP ${iterations} veces secuencialmente.
 
     Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
     Set Newline    LF
@@ -105,9 +106,9 @@ Verificar CLI Stress Secuencial
     Close Connection
 
 Verificar CLI Timeout
-    [Documentation]    Parar controller, enviar CONFIG_IP y esperar respuesta con Request Timed Out.
+    [Documentation]    Parar sensor, enviar CONFIG_IP y esperar timeout.
 
-    Parar sensor
+    Parar Sensor
 
     Open Connection    ${TELNET_HOST}    port=${TELNET_PORT}    timeout=${CLI_TIMEOUT}
     Set Newline    LF
@@ -116,22 +117,19 @@ Verificar CLI Timeout
 
     Write    CONFIG_IP 1 IP 7.7.7.7/22
 
-    # Espera a que llegue respuesta de éxito o de error
     ${out}=    Read Until Regexp    OK:|ERROR:
     Log    TELNET timeout out:\n${out}
 
-    # Si llegó OK:, verificamos OK y que no haya timeout
     ${ok_check}=    Run Keyword And Ignore Error    Should Contain    ${out}    OK:
     Run Keyword If    '${ok_check}[0]' == 'PASS'    Should Not Contain    ${out}    Request Timed Out
 
-    # Si llegó ERROR:, verificamos timeout
     Run Keyword If    '${ok_check}[0]' != 'PASS'    Should Contain    ${out}    ERROR:
     Run Keyword If    '${ok_check}[0]' != 'PASS'    Should Contain    ${out}    Request Timed Out
 
     Write    quit
     Close Connection
 
-    Iniciar sensor
+    Iniciar Sensor
 
 Verificar Carga Paralela CLI
     [Arguments]    ${clients}    ${requests_per_client}

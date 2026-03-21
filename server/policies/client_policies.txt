@@ -8,3 +8,4 @@ ciphers = ChaCha20Poly1305 AES-256/GCM AES-128/GCM AES-128/CCM AES-128/CCM(8)
 # Note: In some Botan versions, the identifier might be 'ML-KEM-768' 
 # or 'x25519/ML-KEM-768' if you want the hybrid NIST-recommended path.
 key_exchange_groups = ML-KEM-768 ML-KEM-1024 x25519/ML-KEM-768
+require_cert_revocation_info = false

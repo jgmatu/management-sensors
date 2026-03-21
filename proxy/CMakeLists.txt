@@ -22,6 +22,11 @@ add_executable(proxy
     src/main.cpp
 )
 
+target_include_directories(proxy
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
+
 target_link_libraries(proxy
     PRIVATE
         Botan::Botan

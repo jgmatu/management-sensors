@@ -11,129 +11,22 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <vector>
-#include <map>
-
 
 #include <db/DatabaseManager.hpp>
 #include <http/QuantumSafeHttp.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
 #include <dispatcher/Dispatcher.hpp>
-#include <cli/SensorCommandCli.hpp>
+#include <cli/QuantumCommandCli.hpp>
 #include <log/Log.hpp>
-
-#define REQUEST_TIMEOUT_MS 2 * 1000
 
 // Global database handle shared between TLS engine worker threads and main.
 std::shared_ptr<DatabaseManager> g_db;
 Dispatcher g_dispatcher;
 
-QuantumSafeTlsEngine::SessionMode parse_session_mode(const std::string& mode)
-{
-    if (mode == "http")
-    {
-        return QuantumSafeTlsEngine::SessionMode::Http;
-    }
-    if (mode == "raw")
-    {
-        return QuantumSafeTlsEngine::SessionMode::Raw;
-    }
-    throw std::runtime_error("Invalid mode: " + mode + ". Use 'raw' or 'http'.");
-}
-
-// Helper to convert status to human-readable string
-std::string status_to_string(ResponseStatus status) {
-    switch (status) {
-        case ResponseStatus::SUCCESS:      return "SUCCESS";
-        case ResponseStatus::TIMEOUT:      return "ERROR: Request Timed Out";
-        case ResponseStatus::DB_ERROR:     return "ERROR: Database Failure";
-        case ResponseStatus::SYSTEM_FULL:  return "ERROR: Maximum Pending Requests Reached";
-        case ResponseStatus::PENDING:      return "PENDING";
-        default:                           return "UNKNOWN_ERROR";
-    }
-}
-
-const std::map<std::string, std::function<std::string(const SensorCommand&)>> command_registry = {
-    {"CONFIG_IP", [](const SensorCommand& sc) -> std::string {
-        uint64_t request_id = g_dispatcher.generate_id();
-
-        logging::Logger::instance().info(
-            "server",
-            "[CLI] New CONFIG_IP request created | sensor_id=" +
-                std::to_string(sc.id) +
-                " | request_id=" + std::to_string(request_id)
-        );
-
-        g_db->add_pending_config(sc.id, "sensor-" + std::to_string(sc.id), sc.value, true, request_id);
-
-        logging::Logger::instance().info(
-            "server",
-            "[CLI] Waiting for DB confirmation | request_id=" +
-                std::to_string(request_id) +
-                " | timeout_ms=" + std::to_string(REQUEST_TIMEOUT_MS)
-        );
-
-        auto status = g_dispatcher.wait_for_response(request_id, REQUEST_TIMEOUT_MS);
-
-        logging::Logger::instance().info(
-            "server",
-            "[CLI] DB wait finished | request_id=" +
-                std::to_string(request_id) +
-                " | status=" + status_to_string(status)
-        );
-
-        if (status == ResponseStatus::SUCCESS) {
-            return "OK: Sensor " + std::to_string(sc.id) + " updated successfully.";
-        }
-        return "ERROR: " + status_to_string(status) + " (ID: " + std::to_string(request_id) + ")";
-    }},
-    {"REBOOT", [](const SensorCommand& sc) -> std::string {
-        return "OK: Rebooting sensor " + std::to_string(sc.id);
-    }}
-};
-
-
-/**
- * @brief Process one decrypted TLS request and build a plaintext reply.
- *
- * This function runs in the TLS server worker threads. It parses the
- * incoming CLI-like command, dispatches it to the corresponding handler
- * in `command_registry`, and returns the resulting message as bytes.
- */
- std::vector<uint8_t> on_tls_message_process(const std::vector<uint8_t>& input) {
-    if (input.empty()) return {};
-    const std::string request(input.begin(), input.end());
-    SensorCommandCli cli(request);
-    // Señal de salida del cliente de pruebas:
-    if (!cli.command_.valid && cli.command_.cmd == "quit") {
-        return {};
-    }
-    std::string response;
-    logging::Logger::instance().info(
-        "server",
-        "[CLI] Command received: " + JsonUtils::toString(
-            boost::json::value{
-                { "cmd",    cli.command_.cmd },
-                { "id",     cli.command_.id },
-                { "attr",   cli.command_.attr },
-                { "value",  cli.command_.value },
-                { "valid",  cli.command_.valid }
-            }
-        )
-    );
-    auto it = command_registry.find(cli.command_.cmd);
-    if (it != command_registry.end()) {
-        response = it->second(cli.command_);
-    } else {
-        response = "Command '" + cli.command_.cmd + "' not found in registry.";
-    }
-    return std::vector<uint8_t>(response.begin(), response.end());
-}
-
 /**
  * @brief Logic handler for Database NOTIFY events.
- * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ * Processes JSON payloads from the PostgreSQL 'config_events' channel.
  */
 void on_db_config_event_received(boost::json::object msg)
 {
@@ -219,7 +112,7 @@ void on_db_state_event_received(boost::json::object msg)
 
 /**
  * @brief Logic handler for Database NOTIFY events.
- * Processes JSON payloads from the PostgreSQL 'state_events' channel.
+ * Processes JSON payloads from the PostgreSQL 'error_events' channel.
  */
 void on_db_error_event_received(boost::json::object msg)
 {
@@ -247,7 +140,7 @@ void on_db_error_event_received(boost::json::object msg)
 
 int main(int argc, char* argv[])
 {
-    logging::Logger::instance().info("server", "Creating logs directory");
+    logging::Logger::instance().set_process_name("server");
 
     // clang-format off
     boost::program_options::options_description desc("Allowed options");
@@ -291,7 +184,6 @@ int main(int argc, char* argv[])
     logging::Logger::instance().info("server", "OCSP cache time: " + std::to_string(vm["ocsp-cache-time"].as<uint64_t>()));
     logging::Logger::instance().info("server", "Document root: " + vm["document-root"].as<std::string>());
 
-    // ... Initialize and start your QuantumSafeTlsEngine ...
     try
     {
         const auto port = vm["port"].as<uint16_t>();
@@ -299,21 +191,12 @@ int main(int argc, char* argv[])
         const auto certificate = vm["cert"].as<std::string>();
         const auto key = vm["key"].as<std::string>();
         const auto mode = vm["mode"].as<std::string>();
-        const auto session_mode = parse_session_mode(mode);
         const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
         const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
         const auto document_root = vm["document-root"].as<std::string>();
 
         auto server = std::make_shared<QuantumSafeTlsEngine>(
             port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
-
-        if (session_mode == QuantumSafeTlsEngine::SessionMode::Http)
-        {
-            auto http_handler = std::make_shared<QuantumSafeHttp>(
-                std::static_pointer_cast<IQuantumConnDetailsProvider>(server));
-            server->set_http_handler(http_handler, document_root);
-        }
-        server->set_session_mode(session_mode);
 
         // Build the connection string with TCP Keep-Alive parameters
         std::string conn_str = 
@@ -346,8 +229,23 @@ int main(int argc, char* argv[])
         boost::json::object sanity_info = g_db->get_sanity_info();
         logging::Logger::instance().info("server", JsonUtils::toString(sanity_info));
 
-        // No iniciar el servidor hasta que se haya configurado la base de datos.
-        server->set_processor(on_tls_message_process);
+        // Create the protocol-specific session handler
+        if (mode == "http")
+        {
+            server->set_session_handler(
+                std::make_shared<QuantumSafeHttp>(std::static_pointer_cast<IConnDetailsProvider>(server),
+                    document_root, &g_dispatcher, g_db));
+        }
+        else if (mode == "raw")
+        {
+            server->set_session_handler(
+                std::make_shared<QuantumCommandCli>(g_dispatcher, g_db));
+        }
+        else
+        {
+            throw std::runtime_error("Invalid mode: " + mode + ". Use 'raw' or 'http'.");
+        }
+
         server->initialize();
         server->join();
         server->stop();

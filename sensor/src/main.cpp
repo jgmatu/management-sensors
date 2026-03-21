@@ -53,6 +53,7 @@ void run_telemetry_producer(std::stop_token st, mqtt::async_client& client, int 
 
 int main()
 {
+    logging::Logger::instance().set_process_name("sensor");
     mqtt::async_client client(ADDRESS, CLIENT_ID);
 
     auto connOpts = mqtt::connect_options_builder()

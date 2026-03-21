@@ -2,9 +2,9 @@
 
 #include <string>
 
-class IQuantumConnDetailsProvider
+class IConnDetailsProvider
 {
    public:
-    virtual ~IQuantumConnDetailsProvider() = default;
+    virtual ~IConnDetailsProvider() = default;
     virtual std::string get_latest_connection_details() const = 0;
 };

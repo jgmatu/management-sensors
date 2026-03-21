@@ -21,14 +21,8 @@
 #include <oscp/ocsp_cache.hpp>
 
 #include <log/Log.hpp>
-#include <net/IQuantumConnDetailsProvider.hpp>
-
-class QuantumSafeHttp;
-
-using beast_tcp_stream_with_default_awaitable_executor =
-    typename boost::beast::tcp_stream::rebind_executor<
-        boost::asio::use_awaitable_t<>::executor_with_default<
-            boost::asio::any_io_executor>>::other;
+#include <net/IConnDetailsProvider.hpp>
+#include <net/ISessionHandler.hpp>
 
 class Basic_Credentials_Manager final : public Botan::Credentials_Manager
 {
@@ -148,15 +142,12 @@ class TlsHttpCallbacks final : public Botan::TLS::StreamCallbacks
 
 /**
  * @brief Motor TLS preparado para algoritmos post-cuánticos (PQC).
- * Diseñado para gestionar políticas híbridas y contextos de Botan 3.
+ *
+ * Protocol-agnostic: delegates session handling to an ISessionHandler
+ * implementation (HTTP, CLI, or any future protocol layer).
  */
-class QuantumSafeTlsEngine : public IQuantumConnDetailsProvider {
+class QuantumSafeTlsEngine : public IConnDetailsProvider {
 public:
-    enum class SessionMode
-    {
-        Raw,
-        Http
-    };
     /**
      * @brief Constructor for the QuantumSafeTlsEngine.
      * 
@@ -174,81 +165,22 @@ public:
                                   uint64_t ocsp_cache_time,
                                   uint64_t ocsp_timeout);
 
-    /**
-     * @brief Destructor for the QuantumSafeTlsEngine.
-     * 
-     * This destructor is default and does not perform any additional cleanup.
-     */
     virtual ~QuantumSafeTlsEngine() = default;
 
-    /**
-     * @brief Performs the cryptographic and network setup for the Quantum-Safe engine.
-     * 
-     * This method executes the following sequence:
-     * 1. Loads the Hybrid/PQC TLS Policy (defining algorithms like Kyber or Dilithium).
-     * 2. Initializes the Credentials Manager with the server's certificate and private key.
-     * 3. Sets up an In-Memory Session Manager for tracking TLS sessions.
-     * 4. Consolidates these into a single Botan::TLS::Context.
-     * 5. Spawns the asynchronous Listener coroutine (Acceptor) into the IO context 
-     *    using the pre-configured network endpoint.
-     * 
-     * @throw std::exception if certificate loading fails or policy is invalid.
-     */
     void initialize();
-
-    /**
-     * @brief Orchestrates a graceful shutdown of the TLS engine and its worker threads.
-     * 
-     * This method executes a safe teardown sequence:
-     * 1. Signals the Boost.Asio event loop to terminate immediately via io_context::stop().
-     *    This prevents any new connection attempts and cancels pending asynchronous 
-     *    operations (timers, socket waits).
-     * 2. Triggers the cleanup of the internal thread pool. 
-     * 3. Since std::jthread is utilized, clearing the collection or allowing it to 
-     *    go out of scope ensures that each worker thread finishes its current 
-     *    execution frame and joins the main thread safely.
-     * 
-     * This ensures that all stack-allocated resources (like TLS state machines 
-     * or buffers) are destroyed in the correct order before the application exits.
-     */
     void stop();
-
-    /**
-     * @brief Blocks the calling thread (main) until all worker threads in the 
-     * pool have finished their execution.
-     */
     void join();
 
     /**
-     * @brief Functional interface for the core Request-Response logic.
-     * 
-     * @param input The decrypted data received from the TLS client.
-     * @return std::vector<uint8_t> The data to be encrypted and sent back as a response.
-     * 
-     * @warning **CONCURRENCY ALERT**: This processor is invoked from the Boost.Asio 
-     *          thread pool. Multiple instances of this function will run 
-     *          simultaneously across different threads for concurrent client sessions.
-     * 
-     * @warning **SHARED MEMORY**: Access to any shared resources (Global variables, 
-     *          DatabaseManager, or static members) MUST be synchronized using 
-     *          std::mutex or std::atomic to prevent race conditions and memory corruption.
+     * @brief Inject the protocol-specific session handler.
+     *
+     * The handler is shared across all concurrent sessions.  Its
+     * handle_session() method is invoked once per TLS connection
+     * after the handshake completes.
      */
-    using SessionProcessor = std::function<std::vector<uint8_t>(const std::vector<uint8_t>& input)>;
-
-    /**
-     * @brief Registers the logic processor for the TLS engine.
-     * 
-     * @param proc The function or lambda that defines how the server transforms 
-     *             incoming decrypted requests into outgoing encrypted responses.
-     */
-    void set_processor(SessionProcessor proc) {
-        processor_ = std::move(proc);
-    }
+    void set_session_handler(std::shared_ptr<ISessionHandler> handler);
 
     std::string get_latest_connection_details() const override;
-    void set_session_mode(SessionMode mode);
-    void set_http_handler(std::shared_ptr<QuantumSafeHttp> http_handler,
-                          std::string document_root);
 
 private:
     std::shared_ptr<Botan::TLS::Policy> load_tls_policy(
@@ -258,7 +190,7 @@ private:
         make_final_completion_handler(const std::string& context);
 
     boost::asio::awaitable<void> do_session(
-        beast_tcp_stream_with_default_awaitable_executor stream,
+        AwaitableTcpStream stream,
         std::shared_ptr<Botan::TLS::Context> ctx,
         std::shared_ptr<OCSP_Cache> ocsp_cache);
 
@@ -267,8 +199,7 @@ private:
             std::shared_ptr<Botan::TLS::Context> tls_ctx,
             std::shared_ptr<OCSP_Cache> ocsp_cache);
 
-    // Handler para procesar datos de la sesión, inyectable para flexibilidad
-    SessionProcessor processor_;
+    std::shared_ptr<ISessionHandler> session_handler_;
 
     // Botan / PQC core configuration (captured from constructor)
     uint16_t port_{0};
@@ -284,22 +215,13 @@ private:
     std::shared_ptr<Botan::TLS::Session_Manager> session_mgr_;
     std::shared_ptr<Botan::TLS::Policy> tls_policy_;
     std::shared_ptr<Botan::TLS::Context> tls_context_;
-    std::shared_ptr<OCSP_Cache> ocsp_cache_; // Needs to stay alive for do_listen
+    std::shared_ptr<OCSP_Cache> ocsp_cache_;
 
     // Asio Core
     boost::asio::ip::tcp::endpoint endpoint_;
     std::unique_ptr<boost::asio::io_context> io_context_; 
     std::vector<std::jthread> thread_pool_;
-    SessionMode session_mode_{SessionMode::Raw};
-    std::shared_ptr<QuantumSafeHttp> http_handler_;
-    std::string document_root_;
 
-    /*
-     * Mutex and string to store the latest connection details.
-     * This is used to provide the connection details to the HTTP server.
-     * It is mutable because it is accessed from the HTTP server thread.
-     * It is a string because it is the format of the connection details.
-     */
     mutable std::mutex connection_details_mutex_;
     std::string latest_connection_details_ = "{}";
 };

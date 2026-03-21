@@ -1,4 +1,11 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
-./build/proxy/proxy <listen_port> <server_cert.pem> <server_key.pem> <backend_host:port>
+./build/proxy/proxy \
+  --listen-port 8443 \
+  --backend-host localhost \
+  --backend-port 50443 \
+  --ca-cert ./server/certs/ca.pem \
+  --cert ./server/certs/client.pem \
+  --key ./server/certs/client.key \
+  --policy ./server/policies/pqc_basic.txt

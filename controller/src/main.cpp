@@ -127,6 +127,7 @@ const std::unordered_map<std::string, MqttHandler> mqtt_dispatch_table = {
 
 int main()
 {
+    logging::Logger::instance().set_process_name("controller");
     try
     {
         // Build the connection string with TCP Keep-Alive parameters

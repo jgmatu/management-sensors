@@ -1,19 +1,54 @@
 #include <http/QuantumSafeHttp.hpp>
 #include <botan/version.h>
+#include <db/DatabaseManager.hpp>
+#include <dispatcher/Dispatcher.hpp>
 #include <log/Log.hpp>
+
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/json.hpp>
 
 namespace http = boost::beast::http;
 
 QuantumSafeHttp::QuantumSafeHttp(
-    std::shared_ptr<IQuantumConnDetailsProvider> connection_details_provider)
+    std::shared_ptr<IConnDetailsProvider> connection_details_provider,
+    std::string document_root,
+    Dispatcher* dispatcher,
+    std::shared_ptr<DatabaseManager> db)
     : connection_details_provider_(std::move(connection_details_provider))
+    , document_root_(std::move(document_root))
+    , dispatcher_(dispatcher)
+    , db_(std::move(db))
 {
 }
 
 void QuantumSafeHttp::set_connection_details_provider(
-    std::shared_ptr<IQuantumConnDetailsProvider> provider)
+    std::shared_ptr<IConnDetailsProvider> provider)
 {
     connection_details_provider_ = std::move(provider);
+}
+
+void QuantumSafeHttp::set_document_root(std::string document_root)
+{
+    document_root_ = std::move(document_root);
+}
+
+boost::asio::awaitable<void> QuantumSafeHttp::handle_session(TlsStream& stream)
+{
+    boost::beast::flat_buffer buffer;
+    for (;;)
+    {
+        Request req;
+        co_await http::async_read(stream, buffer, req);
+
+        auto response = req.target().starts_with("/api")
+                            ? handle_api_request(std::move(req))
+                            : handle_request(std::move(req), document_root_);
+
+        const auto keep_alive = response.keep_alive();
+        co_await boost::beast::async_write(
+            stream, std::move(response), boost::asio::use_awaitable);
+        if (!keep_alive) break;
+    }
 }
 
 http::message_generator QuantumSafeHttp::handle_request(
@@ -52,18 +87,124 @@ http::message_generator QuantumSafeHttp::handle_request(
 
 http::message_generator QuantumSafeHttp::handle_api_request(Request&& req)
 {
-    if (req.method() != http::verb::get) return bad_request(req, "Unknown API method");
-    if (req.target() != "/api/connection_details") return not_found(req);
+    const auto target = req.target();
 
-    logging::Logger::instance().info("http", "Connection details request received");
+    if (target == "/api/connection_details" && req.method() == http::verb::get)
+    {
+        logging::Logger::instance().info("http", "Connection details request received");
+        if (!connection_details_provider_)
+            return server_error(req, "Connection details provider is not configured");
+        return success_text(
+            req,
+            connection_details_provider_->get_latest_connection_details(),
+            "application/json");
+    }
 
-    if (!connection_details_provider_)
-        return server_error(req, "Connection details provider is not configured");
+    if (target == "/api/config_ip" && req.method() == http::verb::post)
+    {
+        return handle_config_ip(req);
+    }
 
-    return success_text(
-        req,
-        connection_details_provider_->get_latest_connection_details(),
-        "application/json");
+    return not_found(req);
+}
+
+http::message_generator QuantumSafeHttp::handle_config_ip(const Request& req)
+{
+    if (!dispatcher_ || !db_)
+        return server_error(req, "Dispatcher or database not configured");
+
+    int sensor_id = 0;
+    std::string ip;
+
+    try
+    {
+        auto body = boost::json::parse(req.body());
+        auto const& obj = body.as_object();
+        sensor_id = static_cast<int>(obj.at("sensor_id").as_int64());
+        ip = boost::json::value_to<std::string>(obj.at("ip"));
+    }
+    catch (const std::exception& e)
+    {
+        return bad_request(req,
+            std::string(R"({"status":"error","message":"Invalid JSON body: )") +
+            e.what() + "\"}");
+    }
+
+    uint64_t request_id = dispatcher_->generate_id();
+
+    logging::Logger::instance().info("http",
+        "[API] CONFIG_IP request | sensor_id=" + std::to_string(sensor_id) +
+        " | ip=" + ip + " | request_id=" + std::to_string(request_id));
+
+    try
+    {
+        db_->add_pending_config(
+            sensor_id,
+            "sensor-" + std::to_string(sensor_id),
+            ip, true, request_id);
+    }
+    catch (const std::exception& e)
+    {
+        logging::Logger::instance().error("http",
+            "[API] DB error: " + std::string(e.what()));
+
+        boost::json::object err_body = {
+            {"status",     "error"},
+            {"message",    std::string("Database error: ") + e.what()},
+            {"request_id", request_id}
+        };
+        return server_error(req, boost::json::serialize(err_body));
+    }
+
+    logging::Logger::instance().info("http",
+        "[API] Waiting for pipeline response | request_id=" +
+        std::to_string(request_id) +
+        " | timeout_ms=" + std::to_string(REQUEST_TIMEOUT_MS));
+
+    auto status = dispatcher_->wait_for_response(request_id, REQUEST_TIMEOUT_MS);
+
+    logging::Logger::instance().info("http",
+        "[API] Pipeline finished | request_id=" + std::to_string(request_id) +
+        " | status=" + status_to_string(status));
+
+    if (status == ResponseStatus::SUCCESS)
+    {
+        boost::json::object ok_body = {
+            {"status",     "success"},
+            {"sensor_id",  sensor_id},
+            {"request_id", request_id},
+            {"message",    "Sensor " + std::to_string(sensor_id) + " updated successfully"}
+        };
+        return success_text(req, boost::json::serialize(ok_body), "application/json");
+    }
+
+    boost::json::object fail_body = {
+        {"status",     "error"},
+        {"sensor_id",  sensor_id},
+        {"request_id", request_id},
+        {"message",    status_to_string(status)}
+    };
+
+    http::response<http::string_body> res{
+        http::status::service_unavailable, req.version()};
+    res.set(http::field::server, std::string("Botan ") + Botan::short_version_string());
+    res.set(http::field::content_type, "application/json");
+    res.keep_alive(req.keep_alive());
+    res.body() = boost::json::serialize(fail_body);
+    res.prepare_payload();
+    return res;
+}
+
+std::string QuantumSafeHttp::status_to_string(ResponseStatus status)
+{
+    switch (status) {
+        case ResponseStatus::SUCCESS:     return "SUCCESS";
+        case ResponseStatus::TIMEOUT:     return "Request Timed Out";
+        case ResponseStatus::DB_ERROR:    return "Database Failure";
+        case ResponseStatus::SYSTEM_FULL: return "Maximum Pending Requests Reached";
+        case ResponseStatus::PENDING:     return "PENDING";
+        default:                          return "UNKNOWN_ERROR";
+    }
 }
 
 boost::beast::string_view QuantumSafeHttp::mime_type(boost::beast::string_view path)

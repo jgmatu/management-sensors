@@ -5,7 +5,7 @@
 set -euo pipefail
 
 TCP_PORT=2000
-LOG_FILE="/tmp/bridge.log"
+LOG_FILE="${REPO_ROOT}/logs/bridge.log"
 
 BASH_CMD="/bin/bash --noprofile --norc"
 
