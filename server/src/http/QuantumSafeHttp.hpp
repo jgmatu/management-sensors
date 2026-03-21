@@ -12,6 +12,7 @@
 
 class Dispatcher;
 class DatabaseManager;
+class JwtManager;
 enum class ResponseStatus;
 
 class QuantumSafeHttp : public ISessionHandler
@@ -22,7 +23,8 @@ public:
             nullptr,
         std::string document_root = {},
         Dispatcher* dispatcher = nullptr,
-        std::shared_ptr<DatabaseManager> db = nullptr);
+        std::shared_ptr<DatabaseManager> db = nullptr,
+        std::shared_ptr<JwtManager> jwt = nullptr);
 
     boost::asio::awaitable<void> handle_session(TlsStream& stream) override;
 
@@ -41,7 +43,12 @@ private:
         boost::beast::string_view doc_root);
 
     boost::beast::http::message_generator handle_api_request(Request&& req);
+    boost::beast::http::message_generator handle_login(const Request& req);
     boost::beast::http::message_generator config_ip(const Request& req);
+
+    static boost::beast::http::message_generator unauthorized(
+        const Request& req, std::string why);
+    bool require_auth(const Request& req, std::string& out_error) const;
 
     static boost::beast::string_view mime_type(boost::beast::string_view path);
     static std::string path_cat(
@@ -74,6 +81,7 @@ private:
     std::string document_root_;
     Dispatcher* dispatcher_{nullptr};
     std::shared_ptr<DatabaseManager> db_;
+    std::shared_ptr<JwtManager> jwt_;
 
     static constexpr int REQUEST_TIMEOUT_MS = 2000;
 };

@@ -14,6 +14,7 @@
 
 #include <db/DatabaseManager.hpp>
 #include <http/QuantumSafeHttp.hpp>
+#include <jwt/JwtManager.hpp>
 #include <net/QuantumSafeTlsEngine.hpp>
 #include <json/JsonUtils.hpp>
 #include <dispatcher/Dispatcher.hpp>
@@ -153,7 +154,9 @@ int main(int argc, char* argv[])
         ("mode", boost::program_options::value<std::string>()->default_value("raw"), "Session mode: raw | http")
         ("ocsp-request-timeout", boost::program_options::value<uint64_t>()->default_value(10), "OCSP request timeout in seconds")
         ("ocsp-cache-time", boost::program_options::value<uint64_t>()->default_value(6 * 60), "Cache validity time for OCSP responses in minutes")
-        ("document-root", boost::program_options::value<std::string>()->default_value("webroot"), "Path to the server's static documents folder");
+        ("document-root", boost::program_options::value<std::string>()->default_value("webroot"), "Path to the server's static documents folder")
+        ("jwt-key", boost::program_options::value<std::string>()->default_value(""), "Path to the JWT ES384 private key (enables API auth)")
+        ("jwt-cert", boost::program_options::value<std::string>()->default_value(""), "Path to the JWT ES384 certificate (public key)");
     // clang-format on
 
     boost::program_options::variables_map vm;
@@ -194,6 +197,8 @@ int main(int argc, char* argv[])
         const auto ocsp_cache_time = vm["ocsp-cache-time"].as<uint64_t>();
         const auto ocsp_request_timeout = vm["ocsp-request-timeout"].as<uint64_t>();
         const auto document_root = vm["document-root"].as<std::string>();
+        const auto jwt_key_path  = vm["jwt-key"].as<std::string>();
+        const auto jwt_cert_path = vm["jwt-cert"].as<std::string>();
 
         auto server = std::make_shared<QuantumSafeTlsEngine>(
             port, certificate, key, policy, ocsp_cache_time, ocsp_request_timeout);
@@ -226,9 +231,18 @@ int main(int argc, char* argv[])
         // Create the protocol-specific session handler
         if (mode == "http")
         {
+            std::shared_ptr<JwtManager> jwt;
+            if (!jwt_key_path.empty() && !jwt_cert_path.empty())
+            {
+                jwt = std::make_shared<JwtManager>(jwt_key_path, jwt_cert_path);
+                logging::Logger::instance().info("server",
+                    "[MAIN] JWT authentication enabled (ES384)");
+            }
+
             server->set_session_handler(
-                std::make_shared<QuantumSafeHttp>(std::static_pointer_cast<IConnDetailsProvider>(server),
-                    document_root, &g_dispatcher, g_db));
+                std::make_shared<QuantumSafeHttp>(
+                    std::static_pointer_cast<IConnDetailsProvider>(server),
+                    document_root, &g_dispatcher, g_db, jwt));
         }
         else if (mode == "raw")
         {

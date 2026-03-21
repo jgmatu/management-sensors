@@ -23,13 +23,13 @@ echo ""
 mkdir -p "${CERTS_DIR}"
 
 # ── 1. CA (Certificate Authority) ────────────────────────────────────────────
-echo "[1/7] Generando clave privada de la CA (${ALGO} ${PARAMS})..."
+echo "[1/9] Generando clave privada de la CA (${ALGO} ${PARAMS})..."
 botan keygen \
     --algo="${ALGO}" \
     --params="${PARAMS}" \
     --output="${CERTS_DIR}/ca.key"
 
-echo "[2/7] Generando certificado autofirmado de la CA (${DAYS_CA} días)..."
+echo "[2/9] Generando certificado autofirmado de la CA (${DAYS_CA} días)..."
 botan gen_self_signed \
     --ca \
     --country=ES \
@@ -46,13 +46,13 @@ botan cert_info "${CERTS_DIR}/ca.pem" | head -8
 
 # ── 2. Servidor ──────────────────────────────────────────────────────────────
 echo ""
-echo "[3/7] Generando clave privada del servidor (${ALGO} ${PARAMS})..."
+echo "[3/9] Generando clave privada del servidor (${ALGO} ${PARAMS})..."
 botan keygen \
     --algo="${ALGO}" \
     --params="${PARAMS}" \
     --output="${CERTS_DIR}/server.key"
 
-echo "[4/7] Generando CSR del servidor (CN=${SERVER_CN}, DNS=${SERVER_CN})..."
+echo "[4/9] Generando CSR del servidor (CN=${SERVER_CN}, DNS=${SERVER_CN})..."
 botan gen_pkcs10 \
     --dns="${SERVER_CN}" \
     --hash="${HASH}" \
@@ -60,7 +60,7 @@ botan gen_pkcs10 \
     "${CERTS_DIR}/server.key" \
     "${SERVER_CN}"
 
-echo "[5/7] Firmando certificado del servidor con la CA (${DAYS_CERT} días)..."
+echo "[5/9] Firmando certificado del servidor con la CA (${DAYS_CERT} días)..."
 botan sign_cert \
     --duration="${DAYS_CERT}" \
     --hash="${HASH}" \
@@ -74,7 +74,7 @@ botan cert_info "${CERTS_DIR}/server.pem" | head -8
 
 # ── 3. Cliente (para mTLS del proxy) ────────────────────────────────────────
 echo ""
-echo "[6/7] Generando clave privada del cliente (${ALGO} ${PARAMS})..."
+echo "[6/9] Generando clave privada del cliente (${ALGO} ${PARAMS})..."
 botan keygen \
     --algo="${ALGO}" \
     --params="${PARAMS}" \
@@ -100,17 +100,48 @@ botan sign_cert \
 echo "    Client subject:"
 botan cert_info "${CERTS_DIR}/client.pem" | head -8
 
-# ── 4. Verificación ─────────────────────────────────────────────────────────
+# ── 4. JWT (token de autenticación API REST) ─────────────────────────────────
 echo ""
-echo "[7/7] Verificando cadena de certificados..."
+echo "[7/9] Generando clave privada JWT (${ALGO} ${PARAMS} → ES384)..."
+botan keygen \
+    --algo="${ALGO}" \
+    --params="${PARAMS}" \
+    --output="${CERTS_DIR}/jwt.key"
+
+echo "    Generando CSR del certificado JWT..."
+botan gen_pkcs10 \
+    --hash="${HASH}" \
+    --output="${CERTS_DIR}/jwt.req" \
+    "${CERTS_DIR}/jwt.key" \
+    "jwt-signing"
+
+echo "    Firmando certificado JWT con la CA (${DAYS_CERT} días)..."
+botan sign_cert \
+    --duration="${DAYS_CERT}" \
+    --hash="${HASH}" \
+    --output="${CERTS_DIR}/jwt.pem" \
+    "${CERTS_DIR}/ca.pem" \
+    "${CERTS_DIR}/ca.key" \
+    "${CERTS_DIR}/jwt.req"
+
+echo "    JWT subject:"
+botan cert_info "${CERTS_DIR}/jwt.pem" | head -8
+
+# ── 5. Verificación ─────────────────────────────────────────────────────────
+echo ""
+echo "[8/9] Verificando cadena de certificados..."
 echo -n "    server.pem -> ca.pem: "
 botan cert_verify "${CERTS_DIR}/server.pem" "${CERTS_DIR}/ca.pem" || true
 echo -n "    client.pem -> ca.pem: "
 botan cert_verify "${CERTS_DIR}/client.pem" "${CERTS_DIR}/ca.pem" || true
+echo -n "    jwt.pem    -> ca.pem: "
+botan cert_verify "${CERTS_DIR}/jwt.pem" "${CERTS_DIR}/ca.pem" || true
 
 echo ""
-echo "=== Ficheros generados ==="
+echo "[9/9] Ficheros generados:"
 ls -la "${CERTS_DIR}/"
 echo ""
 echo "Listo. Recuerda añadir require_cert_revocation_info = false"
 echo "a las políticas TLS para entorno de desarrollo (sin CRL/OCSP)."
+echo ""
+echo "JWT: usa jwt.key (ES384) para firmar tokens y jwt.pem para verificarlos."

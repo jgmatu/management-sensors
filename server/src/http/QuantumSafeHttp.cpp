@@ -2,6 +2,7 @@
 #include <botan/version.h>
 #include <db/DatabaseManager.hpp>
 #include <dispatcher/Dispatcher.hpp>
+#include <jwt/JwtManager.hpp>
 #include <log/Log.hpp>
 
 #include <boost/beast/core/flat_buffer.hpp>
@@ -13,11 +14,13 @@ QuantumSafeHttp::QuantumSafeHttp(
     std::shared_ptr<IConnDetailsProvider> connection_details_provider,
     std::string document_root,
     Dispatcher* dispatcher,
-    std::shared_ptr<DatabaseManager> db)
+    std::shared_ptr<DatabaseManager> db,
+    std::shared_ptr<JwtManager> jwt)
     : connection_details_provider_(std::move(connection_details_provider))
     , document_root_(std::move(document_root))
     , dispatcher_(dispatcher)
     , db_(std::move(db))
+    , jwt_(std::move(jwt))
 {
 }
 
@@ -89,6 +92,15 @@ http::message_generator QuantumSafeHttp::handle_api_request(Request&& req)
 {
     const auto target = req.target();
 
+    // Public endpoint: login does not require a token
+    if (target == "/api/auth/login" && req.method() == http::verb::post)
+        return handle_login(req);
+
+    // All other /api/* endpoints require a valid JWT
+    std::string auth_error;
+    if (!require_auth(req, auth_error))
+        return unauthorized(req, std::move(auth_error));
+
     if (target == "/api/connection_details" && req.method() == http::verb::get)
     {
         logging::Logger::instance().info("http", "Connection details request received");
@@ -106,6 +118,101 @@ http::message_generator QuantumSafeHttp::handle_api_request(Request&& req)
     }
 
     return not_found(req);
+}
+
+// ── JWT Authentication ──────────────────────────────────────────────────────
+
+bool QuantumSafeHttp::require_auth(const Request& req,
+                                   std::string& out_error) const
+{
+    if (!jwt_)
+    {
+        out_error = "JWT authentication not configured";
+        return false;
+    }
+
+    auto it = req.find(http::field::authorization);
+    if (it == req.end())
+    {
+        out_error = "Missing Authorization header";
+        return false;
+    }
+
+    const auto auth_value = it->value();
+    constexpr std::string_view bearer_prefix = "Bearer ";
+    if (auth_value.size() <= bearer_prefix.size() ||
+        auth_value.substr(0, bearer_prefix.size()) != bearer_prefix)
+    {
+        out_error = "Authorization header must use Bearer scheme";
+        return false;
+    }
+
+    const std::string token(
+        auth_value.data() + bearer_prefix.size(),
+        auth_value.size() - bearer_prefix.size());
+
+    auto claims = jwt_->verify(token);
+    if (!claims)
+    {
+        out_error = "Invalid or expired token";
+        return false;
+    }
+
+    logging::Logger::instance().info("http",
+        "[AUTH] Authenticated sub=" + claims->sub +
+        " role=" + claims->role);
+    return true;
+}
+
+http::message_generator QuantumSafeHttp::handle_login(const Request& req)
+{
+    if (!jwt_)
+        return server_error(req, "JWT authentication not configured");
+
+    std::string username;
+    std::string password;
+
+    try
+    {
+        auto body = boost::json::parse(req.body());
+        const auto& obj = body.as_object();
+
+        if (!obj.contains("username") || !obj.contains("password"))
+            return bad_request(req,
+                R"({"status":"error","message":"Missing username or password"})");
+
+        username = boost::json::value_to<std::string>(obj.at("username"));
+        password = boost::json::value_to<std::string>(obj.at("password"));
+    }
+    catch (const std::exception& e)
+    {
+        return bad_request(req,
+            R"({"status":"error","message":"Invalid JSON body"})");
+    }
+
+    // TODO: validate credentials against the database
+    // For now accept admin/admin as bootstrap credential
+    if (username != "admin" || password != "admin")
+    {
+        logging::Logger::instance().warn("http",
+            "[AUTH] Failed login attempt for user=" + username);
+
+        boost::json::object err;
+        err["status"] = "error";
+        err["message"] = "Invalid credentials";
+        return unauthorized(req, boost::json::serialize(err));
+    }
+
+    auto token = jwt_->generate(username, "admin", 3600);
+
+    logging::Logger::instance().info("http",
+        "[AUTH] Token issued for user=" + username);
+
+    boost::json::object resp;
+    resp["status"] = "success";
+    resp["token"] = token;
+    resp["expires_in"] = 3600;
+    return success_text(req, boost::json::serialize(resp), "application/json");
 }
 
 http::message_generator QuantumSafeHttp::config_ip(const Request& req)
@@ -247,6 +354,19 @@ std::string QuantumSafeHttp::path_cat(
     if (result.back() == '/') result.pop_back();
     result.append(path.data(), path.size());
     return result;
+}
+
+http::message_generator QuantumSafeHttp::unauthorized(
+    const QuantumSafeHttp::Request& req, std::string why)
+{
+    http::response<http::string_body> res{http::status::unauthorized, req.version()};
+    res.set(http::field::server, std::string("Botan ") + Botan::short_version_string());
+    res.set(http::field::content_type, "application/json");
+    res.set(http::field::www_authenticate, "Bearer");
+    res.keep_alive(req.keep_alive());
+    res.body() = std::move(why);
+    res.prepare_payload();
+    return res;
 }
 
 http::message_generator QuantumSafeHttp::bad_request(

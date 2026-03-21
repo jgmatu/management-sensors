@@ -2,24 +2,9 @@ cmake_minimum_required(VERSION 3.24)
 project(server LANGUAGES CXX)
 
 # -----------------------------------------------------------------------------
-# 1. Manual Library Imports (Custom Installations)
+# Dependencies (Botan::Botan defined in root CMakeLists.txt)
 # -----------------------------------------------------------------------------
-
-# --- Botan 3 ---
-add_library(Botan::Botan STATIC IMPORTED)
-set_target_properties(Botan::Botan PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES "/usr/local/include/botan-3/"
-    IMPORTED_LOCATION             "/usr/local/lib/libbotan-3.a"
-    INTERFACE_LINK_LIBRARIES      "Threads::Threads;dl"
-)
-
-# -----------------------------------------------------------------------------
-# 2. Dependencies
-# -----------------------------------------------------------------------------
-find_package(Threads REQUIRED)
-
 set(Boost_USE_STATIC_LIBS ON)
-# Ensure your Boost installation path is in CMAKE_PREFIX_PATH if not in /usr
 find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 
 # -----------------------------------------------------------------------------
@@ -55,4 +40,5 @@ target_link_libraries(${PROJECT_NAME}
         Threads::Threads
         db
         json
+        jwt
 )

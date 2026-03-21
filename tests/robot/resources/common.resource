@@ -21,6 +21,12 @@ ${SERVER_CERT}        ./server/certs/server.pem
 ${SERVER_KEY}         ./server/certs/server.key
 ${SERVER_POLICY}      ./server/policies/pqc_basic.txt
 ${SERVER_WEBROOT}     ./server/webroot
+${JWT_KEY}            ./server/certs/jwt.key
+${JWT_CERT}           ./server/certs/jwt.pem
+
+# API REST (login hardcoded en servidor; ver QuantumSafeHttp::handle_login)
+${API_ADMIN_USER}     admin
+${API_ADMIN_PASS}     admin
 
 ${RAW_PORT}           50443
 ${HTTPS_PORT}         50444
@@ -86,11 +92,12 @@ Iniciar Servidor Raw
     Esperar Puerto Abierto    localhost    ${RAW_PORT}
 
 Iniciar Servidor HTTPS
-    Log    Lanzando servidor en modo HTTPS (puerto ${HTTPS_PORT})...
+    Log    Lanzando servidor en modo HTTPS (puerto ${HTTPS_PORT}) con JWT...
     Start Process
     ...    ${SERVER_BIN}    --cert    ${SERVER_CERT}    --key    ${SERVER_KEY}
     ...    --port    ${HTTPS_PORT}    --mode    http    --document-root    ${SERVER_WEBROOT}
     ...    --policy    ${SERVER_POLICY}
+    ...    --jwt-key    ${JWT_KEY}    --jwt-cert    ${JWT_CERT}
     ...    alias=server_https    stdout=DEVNULL    stderr=DEVNULL
     Esperar Puerto Abierto    localhost    ${HTTPS_PORT}
 
@@ -175,40 +182,75 @@ Parar Proxy HTTPS
     Sleep    0.5s
 
 # ── HTTPS helpers (curl a través del proxy) ──
+# bearer_token vacío: sin cabecera Authorization (p. ej. POST /api/auth/login)
 
 HTTPS POST
-    [Arguments]    ${path}    ${body}
+    [Arguments]    ${path}    ${body}    ${bearer_token}=${EMPTY}
     ${url}=    Catenate    SEPARATOR=    http://${PROXY_HOST}:${PROXY_PORT}    ${path}
     Log    [DIAG] HTTPS POST ${url}
     Log    [DIAG] Body: ${body}
     Log    [DIAG] Body length: ${{len($body)}}
-    ${result}=    Run Process
-    ...    curl    -v    -s    -S    --max-time    30
-    ...    -X    POST
-    ...    -H    Content-Type: application/json
-    ...    -H    Connection: close
-    ...    -d    ${body}
-    ...    ${url}
-    ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    # Sin -v: el body en stdout queda solo el JSON (con -v el verbose puede mezclarse y romper json.loads).
+    IF    '${bearer_token}' == '${EMPTY}'
+        ${result}=    Run Process
+        ...    curl    -s    -S    --max-time    30
+        ...    -X    POST
+        ...    -H    Content-Type: application/json
+        ...    -H    Connection: close
+        ...    -d    ${body}
+        ...    ${url}
+        ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    ELSE
+        ${result}=    Run Process
+        ...    curl    -s    -S    --max-time    30
+        ...    -X    POST
+        ...    -H    Content-Type: application/json
+        ...    -H    Connection: close
+        ...    -H    Authorization: Bearer ${bearer_token}
+        ...    -d    ${body}
+        ...    ${url}
+        ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    END
     Log    [DIAG] curl exit code: ${result.rc}
     Log    [DIAG] stdout (${${{len($result.stdout)}}} bytes):\n${result.stdout}
-    Log    [DIAG] stderr (curl verbose):\n${result.stderr}
+    Log    [DIAG] stderr:\n${result.stderr}
     Should Be Equal As Integers    ${result.rc}    0
     ...    curl failed with rc=${result.rc}: ${result.stderr}
     RETURN    ${result.stdout}
 
 HTTPS GET
-    [Arguments]    ${path}
+    [Arguments]    ${path}    ${bearer_token}=${EMPTY}
     ${url}=    Catenate    SEPARATOR=    http://${PROXY_HOST}:${PROXY_PORT}    ${path}
     Log    [DIAG] HTTPS GET ${url}
-    ${result}=    Run Process
-    ...    curl    -v    -s    -S    --max-time    30
-    ...    -H    Connection: close
-    ...    ${url}
-    ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    IF    '${bearer_token}' == '${EMPTY}'
+        ${result}=    Run Process
+        ...    curl    -s    -S    --max-time    30
+        ...    -H    Connection: close
+        ...    ${url}
+        ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    ELSE
+        ${result}=    Run Process
+        ...    curl    -s    -S    --max-time    30
+        ...    -H    Connection: close
+        ...    -H    Authorization: Bearer ${bearer_token}
+        ...    ${url}
+        ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
+    END
     Log    [DIAG] curl exit code: ${result.rc}
     Log    [DIAG] stdout (${${{len($result.stdout)}}} bytes):\n${result.stdout}
-    Log    [DIAG] stderr (curl verbose):\n${result.stderr}
+    Log    [DIAG] stderr:\n${result.stderr}
     Should Be Equal As Integers    ${result.rc}    0
     ...    curl failed with rc=${result.rc}: ${result.stderr}
     RETURN    ${result.stdout}
+
+Obtener JWT Token Admin Y Guardar En Suite
+    [Documentation]    POST /api/auth/login con admin/admin; guarda ${JWT_ACCESS_TOKEN} para la suite.
+    ${login_body}=    Catenate    SEPARATOR=
+    ...    {"username":"${API_ADMIN_USER}","password":"${API_ADMIN_PASS}"}
+    ${resp}=    HTTPS POST    /api/auth/login    ${login_body}
+    Should Contain    ${resp}    "status":"success"
+    Should Contain    ${resp}    "token"
+    # Última línea que empieza por {" (JSON); chr(123)+chr(34) evita " en la celda Robot.
+    ${token}=    Evaluate    json.loads([x.strip() for x in $resp.splitlines() if x.strip().startswith(chr(123)+chr(34))][-1])['token']    modules=json
+    Set Suite Variable    ${JWT_ACCESS_TOKEN}    ${token}
+    Log    [DIAG] JWT token length: ${{len($token)}}
