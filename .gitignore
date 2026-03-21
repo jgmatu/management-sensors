@@ -1,3 +1,6 @@
+# --- Private (NEVER push to GitHub) ---
+private/
+
 # --- Compiled Binaries & Objects ---
 *.o
 *.obj

@@ -1,0 +1,18 @@
+---
+description: Private UI components for the Next.js frontend
+globs: frontend/**/*.{ts,tsx,js,jsx}
+alwaysApply: false
+---
+
+# Private UI Components
+
+The `private/` directory contains proprietary UI components for the Next.js
+frontend application. This folder is excluded from version control.
+
+- When looking for UI components (buttons, layouts, charts, dashboards, forms,
+  etc.), search `private/` first before creating new ones.
+- Import paths from `private/` should use relative imports or a path alias
+  configured in `tsconfig.json`.
+- Never copy private component source code into tracked files. Use imports only.
+- If a required component does not exist in `private/`, ask the user before
+  creating a new one from scratch.
