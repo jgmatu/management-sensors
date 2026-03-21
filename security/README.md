@@ -55,16 +55,20 @@ and validated.
  │                                  │     (Mosquitto)        │ │
  │                                  │      :1883             │ │
  │                                  └───────────┬────────────┘ │
+ │                                  ┌───────────┴────────────┐ │
+ │                                  │    Broker Proxy        │ │
+ │                                  │  (Botan TLS v1.3 PQC)  │ │
+ │                                  └───────────┬────────────┘ │
  └──────────────────────────────────────────────┼──────────────┘
                                                 │
-                                         mTLS tunnel
-                                         (cert-based)
+                                       TLS v1.3 PQC tunnel
+                                       (Botan, cert-based)
                                                 │
  ┌──────────────────────────────────────────────┼──────────────┐
  │             FIELD / SENSOR ZONE              │              │
  │                                  ┌───────────┴────────────┐ │
  │                                  │     Sensor Proxy       │ │
- │                                  │     (TLS v1.3 PQC)     │ │
+ │                                  │  (Botan TLS v1.3 PQC)  │ │
  │                                  └───────────┬────────────┘ │
  │                                  ┌───────────┴────────────┐ │
  │                                  │     Sensor Node        │ │
@@ -80,8 +84,9 @@ and validated.
 | **Server (HTTP mode)** | 50444 | TLS v1.3 PQC + HTTP/1.1 | External clients (REST API, browser) |
 | **HTTP Proxy** | 8443 | Plain HTTP (loopback only) | Local clients bridging to TLS PQC |
 | **Frontend (SPA)** | 3000 | HTTP | Browser users |
-| **MQTT Broker** | 1883 | MQTT (plaintext) | Controller + sensors |
-| **Sensor MQTT endpoint** | varies | MQTT over TLS tunnel | Field network |
+| **MQTT Broker** | 1883 | MQTT (plaintext) | Controller + Broker Proxy (internal only) |
+| **Broker Proxy** | varies | Botan TLS v1.3 PQC | Tunnel endpoint (hardware zone -> field zone) |
+| **Sensor Proxy** | varies | Botan TLS v1.3 PQC | Tunnel endpoint (field zone -> hardware zone) |
 
 ### Hardware-Protected (Not Directly Exposed)
 
@@ -89,7 +94,8 @@ and validated.
 |---|---|
 | PostgreSQL | Bound to localhost or internal network; no external port exposure |
 | Controller | Internal process; communicates only with local DB and MQTT broker |
-| MQTT Broker (internal) | Should be bound to internal interface only |
+| MQTT Broker | Bound to internal interface; sensor traffic exits only through Broker Proxy |
+| Broker Proxy | Internal-facing Botan proxy; bridges MQTT broker to field zone via TLS v1.3 PQC tunnel |
 
 ---
 
