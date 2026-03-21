@@ -60,6 +60,6 @@ target_link_libraries(controller
         PahoMqttCpp::paho-mqttpp3
         Threads::Threads
         Boost::json
-        shared_db
-        shared_json
+        db
+        json
 )

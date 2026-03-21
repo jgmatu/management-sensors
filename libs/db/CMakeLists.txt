@@ -30,20 +30,20 @@ find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 
 # 1. Define the Shared Library
 # We only include DatabaseManager here as requested.
-add_library(shared_db STATIC 
+add_library(db STATIC 
     DatabaseManager.cpp
 )
 
 # 2. Configure Header Visibility
 # PUBLIC: 'common/' is the interface. Consumers inherit this path.
 # PRIVATE: 'src/' is only for compiling the .cpp file.
-target_include_directories(shared_db 
+target_include_directories(db 
     PUBLIC  ${CMAKE_SOURCE_DIR}/common
 )
 
 # 3. Link Database Dependencies
 # PUBLIC ensures anyone linking to this library also gets pqxx.
-target_link_libraries(shared_db 
+target_link_libraries(db 
     PUBLIC 
         pqxx::pqxx             # C++ Wrapper
 
@@ -58,7 +58,7 @@ target_link_libraries(shared_db
 )
 
 # 4. Set Shared Object Version (Good practice for RHEL 10)
-set_target_properties(shared_db PROPERTIES
+set_target_properties(db PROPERTIES
     VERSION 1.0.0
     SOVERSION 1
 )

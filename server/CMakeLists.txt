@@ -53,6 +53,6 @@ target_link_libraries(${PROJECT_NAME}
         Boost::program_options
         Boost::json
         Threads::Threads
-        shared_db
-        shared_json
+        db
+        json
 )
