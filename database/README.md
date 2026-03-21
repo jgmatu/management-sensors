@@ -30,49 +30,51 @@ erDiagram
     sensor_config_pending ||--o| sensor_config_errors : "request_id UNIQUE"
 
     sensor_certs {
-        serial cert_id PK
-        varchar fingerprint UK
-        varchar common_name
-        timestamptz not_after
+        int cert_id PK
+        string fingerprint UK
+        string common_name
+        datetime not_after
         boolean is_revoked
-        text pem_data
+        string pem_data
     }
 
     sensor_config {
         int sensor_id PK
-        varchar hostname
-        inet ip_address
+        string hostname
+        string ip_address
         boolean is_active
-        int cert_id FK_UK
-        bigint request_id
+        int cert_id FK
+        int request_id
     }
 
     sensor_config_pending {
-        bigint request_id PK
+        int request_id PK
         int sensor_id FK
-        varchar requested_hostname
-        inet requested_ip
+        string requested_hostname
+        string requested_ip
         boolean requested_is_active
-        text status
-        timestamptz requested_at
-        timestamptz completed_at
+        string status
+        datetime requested_at
+        datetime completed_at
     }
 
     sensor_config_errors {
-        bigserial error_id PK
-        bigint request_id FK_UK
+        int error_id PK
+        int request_id FK
         int sensor_id FK
-        varchar error_code
-        text error_detail
-        timestamptz occurred_at
+        string error_code
+        string error_detail
+        datetime occurred_at
     }
 
     sensor_state {
-        int sensor_id PK_FK
-        numeric current_temp
-        timestamptz last_update
+        int sensor_id PK
+        float current_temp
+        datetime last_update
     }
 ```
+
+Tipos anteriores son **aproximación para Mermaid** (GitHub solo admite un subconjunto: `int`, `string`, `boolean`, `float`, `datetime`, `PK`, `FK`, `UK`). Los tipos PostgreSQL reales están en la sección [Tablas y columnas](#tablas-y-columnas-resumen) y en `sql/db.sql`.
 
 ### Vista lógica (capas)
 
