@@ -1,5 +1,6 @@
 # --- Private (NEVER push to GitHub) ---
 private/
+frontend/src/components/
 
 # --- Compiled Binaries & Objects ---
 *.o
