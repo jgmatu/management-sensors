@@ -27,7 +27,6 @@ find_package(Boost 1.90.0 CONFIG REQUIRED COMPONENTS program_options json)
 # -----------------------------------------------------------------------------
 add_executable(${PROJECT_NAME}
     src/oscp/ocsp_cache.cpp
-    src/json/JsonUtils.cpp
     src/dispatcher/Dispatcher.cpp
     src/cli/QuantumCommandCli.cpp
     src/http/QuantumSafeHttp.cpp
@@ -55,4 +54,5 @@ target_link_libraries(${PROJECT_NAME}
         Boost::json
         Threads::Threads
         shared_db
+        shared_json
 )

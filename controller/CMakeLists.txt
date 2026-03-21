@@ -41,7 +41,6 @@ find_package(Threads REQUIRED)
 
 # 2. Define the executable and its source files
 add_executable(controller 
-    src/json/JsonUtils.cpp
     src/main.cpp
 )
 
@@ -62,4 +61,5 @@ target_link_libraries(controller
         Threads::Threads
         Boost::json
         shared_db
+        shared_json
 )

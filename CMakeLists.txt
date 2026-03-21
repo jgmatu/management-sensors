@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 enable_testing()
+add_subdirectory(libs/json)
 add_subdirectory(libs/db)
 add_subdirectory(server)
 add_subdirectory(controller)

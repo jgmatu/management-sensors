@@ -32,7 +32,6 @@ void JsonUtils::print(std::ostream& os, boost::json::value const& jv, std::strin
     }
 }
 
-// Returns a pretty string (useful for logging or Next.js API responses)
 std::string JsonUtils::toString(boost::json::value const& jv)
 {
     std::ostringstream ss;
