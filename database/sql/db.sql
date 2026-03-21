@@ -22,12 +22,12 @@ PRINCIPIOS ARQUITECTÓNICOS DEL MODELO
 3) MODELO REACTIVO
    - El esquema es reactivo: combina persistencia + eventos NOTIFY/LISTEN.
    - Los canales de eventos sincronizan componentes sin polling continuo:
-     config_requested, config_errors, state_events, cert_events, config_events.
+     config_requested, error_events, state_events, cert_events, config_events.
    - Canales actuales publicados por la BD (triggers/funciones):
      a) config_requested:
         emitido por notify_config_request() sobre sensor_config_pending
         en operaciones INSERT/UPDATE.
-     b) config_errors:
+     b) error_events:
         emitido por notify_config_error() sobre sensor_config_errors
         en operaciones INSERT/UPDATE/DELETE.
      c) state_events:
@@ -259,7 +259,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION notify_config_error()
 RETURNS TRIGGER AS $$
 BEGIN
-    PERFORM pg_notify('config_errors', json_build_object(
+    PERFORM pg_notify('error_events', json_build_object(
             'sensor_id', NEW.sensor_id,
             'error_code', NEW.error_code,
             'detail', NEW.error_detail,
@@ -424,9 +424,9 @@ SELECT * FROM sensor_config_pending WHERE sensor_id = 1;
 -- ==========================================================
 -- 3. TEST: MQTT Controller reports a failure (Sanity of Error Table)
 -- ==========================================================
-INSERT INTO sensor_config_errors (sensor_id, error_code, error_detail, failed_config)
-VALUES (2, 'MQTT_TIMEOUT', 'Sensor did not respond to PUB message within 5s', 
-       (SELECT row_to_json(p) FROM sensor_config_pending p WHERE sensor_id = 2));
+INSERT INTO sensor_config_errors (sensor_id, error_code, error_detail, request_id)
+VALUES (2, 'MQTT_TIMEOUT', 'Sensor did not respond to PUB message within 5s',
+       (SELECT request_id FROM sensor_config_pending WHERE sensor_id = 2 LIMIT 1));
 
 -- ==========================================================
 -- 8. CONSULTA DE VERIFICACIÓN FINAL (Con Seguridad)
