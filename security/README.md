@@ -100,7 +100,9 @@ and validated.
 
 ---
 
-## 1. Web Application Security (Frontend)
+## 1. Web Application Security (SPA, REST API & JWT)
+
+Subsections **1.1–1.2** focus on the browser/SPA; **1.3** defines **REST API** transport expectations and **JWT (ES384)** authorization policies implemented in `QuantumSafeHttp` / `JwtManager` (Botan).
 
 ### 1.1 Cross-Site Scripting (XSS)
 
@@ -132,6 +134,66 @@ and validated.
 - [ ] CSRF tokens on state-changing endpoints
 - [ ] SameSite cookie attribute set to `Strict`
 - [ ] Origin header validation in QuantumSafeHttp
+
+### 1.3 REST API Security and JWT Authorization
+
+The HTTP handler (`QuantumSafeHttp`) exposes `/api/*` over **TLS v1.3 PQC** (transport). **Application-layer authorization** uses **JSON Web Tokens (JWT)** signed with **ES384** (ECDSA P-384, SHA-384) via **Botan**, using a **dedicated signing keypair** (`jwt.key` / `jwt.pem`) generated with `scripts/gen_certs.sh` — separate from the TLS server certificate.
+
+This complements **§9 User Authentication** (e.g. UAUTH-02 bearer requirement); the tables below are the **normative web/API policies** for REST and JWT.
+
+**Authorization split**: the JWT establishes **authenticated identity** and an application-level **`role` claim** (used for API routing decisions). **Fine-grained authorization** for persisted data—what rows or operations are allowed—is **delegated to PostgreSQL** through its **database roles**, **GRANT** model, and (where deployed) **row-level security (RLS)**. See **Appendix A**.
+
+#### 1.3.1 Endpoint exposure model
+
+| Class | Paths (examples) | Authentication |
+|---|---|---|
+| **Public (no JWT)** | `POST /api/auth/login` | Credentials in JSON body; must be replaced with verified password hashing and lockout before production (see UAUTH-04, UAUTH-05). |
+| **Protected** | `POST /api/config_ip`, `GET /api/connection_details`, other `/api/*` | `Authorization: Bearer <JWT>` required. Missing, malformed, expired, or invalid signature → **401** with `WWW-Authenticate: Bearer` where applicable. |
+
+#### 1.3.2 REST API security policies
+
+| ID | Policy | Description |
+|---|---|---|
+| **APOL-01** | TLS only (production) | API must not be offered in cleartext on untrusted networks. Plain HTTP to a local proxy is acceptable **only** for controlled test/debug on loopback. |
+| **APOL-02** | Bearer scheme | Clients MUST use `Authorization: Bearer <token>`. Reject ambiguous or legacy schemes for consistency and testability. |
+| **APOL-03** | JSON request bodies | Mutating endpoints expect `Content-Type: application/json` and a well-formed JSON body; reject oversized bodies and unknown content types. |
+| **APOL-04** | Input validation | Validate all JSON fields (types, ranges, formats) before database or dispatcher use; align with SQL injection and XSS test vectors for `/api/*`. |
+| **APOL-05** | Rate limiting | Apply strict limits on `POST /api/auth/login` (credential stuffing) and reasonable per-identity / per-IP limits on protected `/api/*`. |
+| **APOL-06** | Error disclosure | Error bodies must not leak stack traces, SQL fragments, or internal paths; use generic messages for clients, detailed logs server-side only. |
+| **APOL-07** | Security headers | Where applicable, set `X-Content-Type-Options`, `Cache-Control` for API responses, and document CORS policy if browser clients call the API cross-origin. |
+
+#### 1.3.3 JWT security policies
+
+| ID | Policy | Description |
+|---|---|---|
+| **JWTPOL-01** | Algorithm allow-list | Header `alg` MUST be **ES384** only. Reject `none`, symmetric algorithms, or unexpected `alg` values (algorithm confusion / JWS bypass). |
+| **JWTPOL-02** | Key separation | JWT signing private key MUST NOT be the TLS server or mTLS client key. Use a dedicated key (and optional CA-bound certificate) for `iss` / key rotation. |
+| **JWTPOL-03** | Private key protection | `jwt.key` permissions restricted to the server OS user; no private signing keys in version control for production; rotate on compromise. |
+| **JWTPOL-04** | Public key trust | Verification uses the configured public key / `jwt.pem` trust anchor; document rotation procedure (deploy new cert + phased token expiry). |
+| **JWTPOL-05** | Standard claims | Include `iss`, `sub`, `role`, `iat`, `exp` (or equivalent). Reject tokens missing required claims. Enforce **RFC 7519** expiration: reject when `now >= exp` (with bounded clock skew, e.g. ≤ 60 s). |
+| **JWTPOL-06** | Token lifetime | Prefer **short-lived access tokens** (e.g. ≤ 1 hour); define refresh or re-login strategy before multi-tenant production. |
+| **JWTPOL-07** | Binding to TLS identity (optional hardening) | Future: bind JWT `aud` / `cnf` to TLS client identity or channel binding where mutual TLS is used end-to-end. |
+| **JWTPOL-08** | Revocation & logout | Plan explicit revocation (denylist, opaque server-side session, or very short TTL + forced re-auth) for admin and role changes. |
+| **JWTPOL-09** | Client storage | Browsers MUST NOT store JWT in `localStorage` for XSS-sensitive deployments; prefer `HttpOnly` cookie or memory + refresh pattern when SPA consumes the API. |
+
+#### 1.3.4 Test vectors (REST + JWT)
+
+| ID | Test | Description |
+|---|---|---|
+| **APIJWT-01** | Missing `Authorization` | Call protected `POST /api/config_ip` without Bearer → **401**. |
+| **APIJWT-02** | Malformed Bearer | Wrong prefix or empty token → **401**. |
+| **APIJWT-03** | Expired token | Token with `exp` in the past → **401**. |
+| **APIJWT-04** | Tampered payload | Alter payload segment; signature verification MUST fail → **401**. |
+| **APIJWT-05** | Algorithm substitution | Header `alg: none` / `HS256` / foreign alg → reject without trusting claims. |
+| **APIJWT-06** | Wrong signing key | Token signed with another ES384 key → **401**. |
+| **APIJWT-07** | Login abuse | High rate of `POST /api/auth/login` failures → throttling / lockout (see APOL-05, UAUTH-05). |
+| **APIJWT-08** | RBAC on API | Token with `role: viewer` MUST NOT succeed on `POST /api/config_ip` once RBAC is enforced (see RBAC-02, RBAC-04). |
+
+**Remediation checklist**:
+- [ ] All protected `/api/*` routes checked for Bearer JWT before business logic
+- [ ] ES384 verification path covered by automated tests (e.g. gtests `jwt_tests`, Robot API suite)
+- [ ] `gen_certs.sh` documents JWT artefacts; CI generates or supplies `jwt.pem` for tests without committing secrets
+- [ ] Production deployment checklist includes JWT key rotation and APOL/JWTPOL review
 
 ---
 
@@ -364,7 +426,7 @@ The system must enforce identity verification for every external access point.
 | ID | Requirement | Description |
 |---|---|---|
 | UAUTH-01 | Frontend login | Users must authenticate before accessing the SPA dashboard. Session tokens (JWT or opaque) with expiration and refresh. |
-| UAUTH-02 | API authentication | Every request to `/api/*` must carry a valid bearer token or be rejected with 401. |
+| UAUTH-02 | API authentication | Every request to protected `/api/*` must carry a valid **Bearer JWT** (ES384, see **§1.3**) or be rejected with **401**. `POST /api/auth/login` is exempt. |
 | UAUTH-03 | CLI authentication | TLS client certificate required for raw mode connections. Certificate CN maps to a user identity. |
 | UAUTH-04 | Password policy | Minimum 12 characters, complexity requirements, bcrypt/argon2 hashing. No plaintext storage. |
 | UAUTH-05 | Brute-force protection | Lock account after 5 failed attempts. Exponential backoff on repeated failures. |
@@ -419,8 +481,8 @@ Never connect with the `postgres` superuser in production.
 
 | ID | Policy | Description |
 |---|---|---|
-| DBPOL-01 | Connection encryption | All PostgreSQL connections must use TLS (`sslmode=verify-full` in connection string). |
-| DBPOL-02 | pg_hba.conf | Reject `trust` and `password` methods. Allow only `scram-sha-256` or `cert`. |
+| ~~DBPOL-01~~ | ~~Connection encryption~~ | SKIP -- PostgreSQL is an internal process within the hardware-protected zone; no external network exposure. |
+| DBPOL-02 | pg_hba.conf | Reject `trust` and `password` methods. Allow only `scram-sha-256` or `cert` for local connections. |
 | DBPOL-03 | Row-level security (RLS) | Future: operator users can only access sensors assigned to their group. |
 | DBPOL-04 | Schema ownership | Tables owned by `app_admin`. Runtime roles granted minimum required privileges. |
 | DBPOL-05 | Audit logging | Enable `pgaudit` extension to log all DDL and DML from runtime roles. |
@@ -449,6 +511,7 @@ Never connect with the `postgres` superuser in production.
 | **P0 - Critical** | Sensor impersonation (SENS-01, SENS-05) | Physical infrastructure compromise |
 | **P0 - Critical** | DB role violation (DBSEC-01..06) | Privilege escalation to superuser |
 | **P0 - Critical** | User auth bypass (UAUTH-01..03) | Unauthorized system access |
+| **P0 - Critical** | REST API / JWT bypass (APIJWT-01..06, APOL-01..02, JWTPOL-01..05) | Unauthorized API actions without valid ES384 Bearer token |
 | **P1 - High** | Privilege escalation (RBAC-01..05) | Unauthorized operations |
 | **P1 - High** | XSS (XSS-01..04) | Credential theft, session hijacking |
 | **P1 - High** | TLS downgrade (NET-01, NET-02) | Encryption bypass |
@@ -616,3 +679,59 @@ All security audit results must satisfy:
 - OWASP CLASP (Comprehensive, Lightweight Application Security Process)
 - OWASP Secure Software Contract Annex
 - WASC -- Web Application Security Consortium (WHID database)
+
+---
+
+## Appendix A: Authorization delegated to PostgreSQL roles
+
+This appendix defines how **authorization** (who may perform which data operations) is **not** fully decided by the JWT alone. After **authentication** via Bearer JWT, the system should treat **PostgreSQL as the authority** for access to tables, sequences, and sensitive attributes, using the **database role system** (and optional **RLS**) described in **§9.3**.
+
+### A.1 Rationale
+
+| Layer | Responsibility |
+|---|---|
+| **JWT (ES384)** | Proves identity for the HTTP session: `sub`, optional `role` claim, `exp`. Rejects anonymous or forged callers at the API edge. |
+| **PostgreSQL** | Enforces **least privilege** on data: which `INSERT`/`UPDATE`/`SELECT` are legal for the connected role; future **RLS** policies per operator or sensor group. |
+
+Relying only on the JWT `role` claim without DB enforcement would allow a compromised server binary or a second client using stolen credentials against the DB to bypass application intent. **Database grants** and **RLS** provide defence in depth.
+
+### A.2 Delegation model
+
+1. **Technical connection role**  
+   The server process connects with a PostgreSQL role such as `app_server` (**§9.3**). That role receives only the **minimum GRANTs** required for normal operation (e.g. `INSERT` on `sensor_config_pending`, `USAGE` on `request_id_seq`).
+
+2. **Human / business roles vs DB roles**  
+   Application roles (**admin**, **operator**, **viewer** in **§9.2**) SHOULD be reflected in the database by one or more of:
+   - **Separate DB roles** per class of user, with distinct `GRANT`s (connection string or `SET ROLE` after JWT validation), or  
+   - A single session role plus **RLS** using session variables (e.g. `SET app.current_user_id = …` then policies on `sensor_config`), or  
+   - **SECURITY DEFINER** functions that validate the caller and perform only allowed statements.
+
+3. **JWT `role` claim**  
+   The claim guides **which DB path** the server chooses (e.g. refuse `POST /api/config_ip` at HTTP layer if `role=viewer`). **Persisted effects** must still be allowed or denied by **PostgreSQL** for the effective role used in the transaction.
+
+4. **Controller and other processes**  
+   Use distinct roles (`app_controller`, etc.) so a compromise of one component cannot exercise another component’s privileges (**§9.3** table access matrix).
+
+### A.3 Policies (database-backed authorization)
+
+| ID | Policy | Description |
+|---|---|---|
+| **AUTHZ-DB-01** | Single source of truth | Table-level permissions are defined in PostgreSQL (`GRANT` / `REVOKE`); documentation in **§9.3** must match runtime configuration. |
+| **AUTHZ-DB-02** | No superuser at runtime | Application binaries never connect as `postgres` or other superuser roles. |
+| **AUTHZ-DB-03** | Align JWT role with DB | For each protected API action, document which PostgreSQL role (or RLS context) must allow the underlying SQL; test **APIJWT-08** together with **DBSEC-*** vectors. |
+| **AUTHZ-DB-04** | RLS for multi-tenant operators | When operators are scoped to sensor groups, enforce **DBPOL-03** (RLS) so even a bug in HTTP handlers cannot read other groups’ rows. |
+| **AUTHZ-DB-05** | Audit | Use **DBPOL-05** (`pgaudit` or equivalent) to log DML executed under each application role for traceability. |
+
+### A.4 Test implications
+
+| ID | Test | Description |
+|---|---|---|
+| **AUTHZ-DB-T01** | JWT allows API but DB denies | Simulate `operator` JWT calling an endpoint whose SQL requires a privilege not granted to the effective DB role → operation MUST fail at DB layer. |
+| **AUTHZ-DB-T02** | Direct psql as `app_server` | Verify cannot `DROP TABLE`, cannot `SELECT` from tables outside the matrix. |
+| **AUTHZ-DB-T03** | RLS isolation | After RLS deployment, user A’s token cannot retrieve user B’s sensors via any query path. |
+
+### A.5 Relationship to §1.3 (JWT)
+
+- **§1.3** (**JWTPOL-***, **APOL-***) governs **token issuance, validation, and API surface** behaviour.  
+- **Appendix A** governs **what the database allows** once the server executes SQL on behalf of an authenticated subject.  
+Both layers are required for a complete **authentication + authorization** story.
