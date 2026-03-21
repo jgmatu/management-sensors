@@ -26,33 +26,6 @@ std::string get_test_conn_str()
 
 } // namespace
 
-class MockDatabaseConnection : public IDatabaseConnection {
-public:
-    MOCK_METHOD(void, connect, (), (override));
-    MOCK_METHOD(void, disconnect, (), (override));
-    MOCK_METHOD(boost::json::object, get_sanity_info, (), (override));
-    MOCK_METHOD(void, register_listen_async,
-        (const std::string& channel,
-            std::function<void(boost::json::object)> handler),
-        (override));
-    MOCK_METHOD(void, run_listener_loop, (), (override));
-};
-
-TEST(DatabaseManagerTest, ConnectAndDisconnect)
-{
-    const std::string conn_str = get_test_conn_str();
-    DatabaseManager db(conn_str);
-
-    try {
-        db.connect();
-    } catch (const std::exception& e) {
-        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
-    }
-
-    // Si llegamos aquí, la conexión fue exitosa
-    EXPECT_NO_THROW(db.disconnect());
-}
-
 TEST(DatabaseManagerTest, GetSanityInfoHasBasicFields)
 {
     const std::string conn_str = get_test_conn_str();

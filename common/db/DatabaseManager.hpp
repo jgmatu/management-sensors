@@ -58,10 +58,8 @@ public:
      */
     void disconnect() override;
 
-    // Example: Execute a simple query
     void execute(const std::string& sql);
 
-    // Example: Fetch data (returns a result set)
     pqxx::result query(const std::string& sql);
 
     /**
@@ -165,7 +163,7 @@ public:
      * 
      * @throw pqxx::sql_error If the database transaction fails or constraints are violated.
      */
-    void upsert_sensor_config(int sensor_id, const std::string& hostname, const std::string& ip,
+    virtual void upsert_sensor_config(int sensor_id, const std::string& hostname, const std::string& ip,
         bool is_active, uint64_t request_id);
 
     /**
@@ -182,7 +180,7 @@ public:
      * 
      * @throw pqxx::sql_error If the database transaction fails or constraints are violated.
      */
-    void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip,
+    virtual void add_pending_config(int sensor_id,  const std::string& hostname,  const std::string& ip,
         bool is_active, u_int64_t request_id);
 
     /**
@@ -192,7 +190,7 @@ public:
      * MAX(request_id) across persistent tables.  Must be called once after
      * connect(), before any call to generate_request_id().
      */
-    void init_request_id_sequence();
+    virtual void init_request_id_sequence();
 
     /**
      * @brief Generates a globally unique request_id via PostgreSQL SEQUENCE.
@@ -203,7 +201,7 @@ public:
      * @return A monotonically increasing, unique uint64_t request identifier.
      * @throws std::runtime_error if the database connection is unavailable.
      */
-    uint64_t generate_request_id();
+    virtual uint64_t generate_request_id();
 
     /**
      * @brief Performs an atomic UPSERT of the sensor's real-time telemetry data.
@@ -221,7 +219,7 @@ public:
      * @note **Triggers**: Successful completion of this transaction fires the 
      *       PostgreSQL 'state_events' trigger for real-time notification.
      */
-    void upsert_sensor_state(int sensor_id, double temp);
+    virtual void upsert_sensor_state(int sensor_id, double temp);
 
 private:
 
