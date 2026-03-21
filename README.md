@@ -383,12 +383,45 @@ botan tls_client localhost --port=50443 \
 
 ### Ejemplo de uso: API REST
 
+El tráfico sigue yendo al **proxy** en HTTP (`:8443`), que lo encapsula en **TLS v1.3 PQC** hacia el servidor (`:50444`). Sobre ese canal, los endpoints bajo `/api/*` (salvo login) exigen un **JWT** firmado con **ES384** (`Authorization: Bearer …`). Detalle normativo: `security/README.md` §1.3.
+
+**1. Obtener token** — `POST /api/auth/login` (público; cuerpo JSON):
+
 ```bash
-curl -X POST http://127.0.0.1:8443/api/config_ip \
+curl -s -X POST http://127.0.0.1:8443/api/auth/login \
   -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}'
+# {"status":"success","token":"<JWT>","expires_in":3600}
+```
+
+> Credenciales de arranque `admin` / `admin` (sustituir por validación real en producción; ver `UAUTH-*` en `security/README.md`).
+
+Guarda el valor de `token` (con `jq`, o cópialo del JSON de la respuesta):
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8443/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | jq -r '.token')
+```
+
+**2. Llamadas protegidas** — incluir siempre `Authorization: Bearer <JWT>`:
+
+```bash
+curl -s -X POST http://127.0.0.1:8443/api/config_ip \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${TOKEN}" \
   -d '{"sensor_id":1,"ip":"10.0.0.1/24"}'
 # {"status":"success","sensor_id":1,"request_id":42,"message":"Configuration applied"}
 ```
+
+Otros endpoints protegidos (mismo header):
+
+```bash
+curl -s http://127.0.0.1:8443/api/connection_details \
+  -H "Authorization: Bearer ${TOKEN}"
+```
+
+**Errores habituales:** sin `Authorization`, token mal formado, caducado o firma inválida → **401** (y `WWW-Authenticate: Bearer` cuando aplica). Claves JWT: `scripts/gen_certs.sh` genera `jwt.key` / `jwt.pem` junto a los certificados TLS.
 
 ## Tests
 
