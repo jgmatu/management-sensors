@@ -5,8 +5,6 @@ Library           OperatingSystem
 Library           Telnet
 Resource          ../resources/common.resource
 
-Suite Setup       Iniciar Modo Raw
-Suite Teardown    Parar Modo Raw
 Test Setup        Preparar Caso Integración
 
 *** Variables ***

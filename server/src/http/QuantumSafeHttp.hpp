@@ -41,7 +41,7 @@ private:
         boost::beast::string_view doc_root);
 
     boost::beast::http::message_generator handle_api_request(Request&& req);
-    boost::beast::http::message_generator handle_config_ip(const Request& req);
+    boost::beast::http::message_generator config_ip(const Request& req);
 
     static boost::beast::string_view mime_type(boost::beast::string_view path);
     static std::string path_cat(

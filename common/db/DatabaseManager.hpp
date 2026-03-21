@@ -186,12 +186,24 @@ public:
         bool is_active, u_int64_t request_id);
 
     /**
-     * @brief Returns the next durable request_id seed from database state.
+     * @brief Initializes the request_id PostgreSQL SEQUENCE.
      *
-     * Computes MAX(request_id) across persistent tables and returns max + 1.
-     * Use this during process startup to keep Dispatcher IDs coherent after restarts.
+     * Creates the sequence if it does not exist and seeds it to the current
+     * MAX(request_id) across persistent tables.  Must be called once after
+     * connect(), before any call to generate_request_id().
      */
-    uint64_t get_next_request_id_seed();
+    void init_request_id_sequence();
+
+    /**
+     * @brief Generates a globally unique request_id via PostgreSQL SEQUENCE.
+     *
+     * Calls nextval('request_id_seq') which is atomic across all connections
+     * and processes, making it safe for parallel server instances.
+     *
+     * @return A monotonically increasing, unique uint64_t request identifier.
+     * @throws std::runtime_error if the database connection is unavailable.
+     */
+    uint64_t generate_request_id();
 
     /**
      * @brief Performs an atomic UPSERT of the sensor's real-time telemetry data.

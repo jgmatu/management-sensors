@@ -75,7 +75,7 @@ TEST(DatabaseManagerTest, GetSanityInfoHasBasicFields)
     db.disconnect();
 }
 
-TEST(DatabaseManagerTest, NextRequestIdSeedUsesPersistedMaxRequestId)
+TEST(DatabaseManagerTest, GenerateRequestIdIsMonotonicViaSequence)
 {
     const std::string conn_str = get_test_conn_str();
     DatabaseManager db(conn_str);
@@ -86,7 +86,31 @@ TEST(DatabaseManagerTest, NextRequestIdSeedUsesPersistedMaxRequestId)
         GTEST_SKIP() << "Cannot connect to test database: " << e.what();
     }
 
-    // Use a high value to avoid collisions with normal test traffic.
+    ASSERT_NO_THROW(db.init_request_id_sequence());
+
+    uint64_t id1 = db.generate_request_id();
+    uint64_t id2 = db.generate_request_id();
+    uint64_t id3 = db.generate_request_id();
+
+    EXPECT_LT(id1, id2) << "IDs must be strictly increasing";
+    EXPECT_LT(id2, id3) << "IDs must be strictly increasing";
+    EXPECT_NE(id1, id2);
+    EXPECT_NE(id2, id3);
+
+    db.disconnect();
+}
+
+TEST(DatabaseManagerTest, SequenceSeededFromPersistedMaxRequestId)
+{
+    const std::string conn_str = get_test_conn_str();
+    DatabaseManager db(conn_str);
+
+    try {
+        db.connect();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Cannot connect to test database: " << e.what();
+    }
+
     const int sensor_id = 910001;
     const int cert_id = sensor_id;
     const uint64_t high_request_id = 900000000000ULL;
@@ -117,11 +141,12 @@ TEST(DatabaseManagerTest, NextRequestIdSeedUsesPersistedMaxRequestId)
         GTEST_SKIP() << "Cannot prepare test data: " << e.what();
     }
 
-    const uint64_t seed = db.get_next_request_id_seed();
-    EXPECT_GE(seed, high_request_id + 1)
-        << "Seed must be greater than persisted MAX(request_id).";
+    ASSERT_NO_THROW(db.init_request_id_sequence());
 
-    // Cleanup (best-effort).
+    const uint64_t id = db.generate_request_id();
+    EXPECT_GT(id, high_request_id)
+        << "Sequence must be seeded past persisted MAX(request_id).";
+
     try {
         pqxx::connection conn(conn_str);
         pqxx::work txn(conn);

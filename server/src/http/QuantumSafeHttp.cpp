@@ -40,9 +40,9 @@ boost::asio::awaitable<void> QuantumSafeHttp::handle_session(TlsStream& stream)
         Request req;
         co_await http::async_read(stream, buffer, req);
 
-        auto response = req.target().starts_with("/api")
-                            ? handle_api_request(std::move(req))
-                            : handle_request(std::move(req), document_root_);
+        auto response = req.target().starts_with("/api") ?
+            handle_api_request(std::move(req)) :
+            handle_request(std::move(req), document_root_);
 
         const auto keep_alive = response.keep_alive();
         co_await boost::beast::async_write(
@@ -102,13 +102,13 @@ http::message_generator QuantumSafeHttp::handle_api_request(Request&& req)
 
     if (target == "/api/config_ip" && req.method() == http::verb::post)
     {
-        return handle_config_ip(req);
+        return config_ip(req);
     }
 
     return not_found(req);
 }
 
-http::message_generator QuantumSafeHttp::handle_config_ip(const Request& req)
+http::message_generator QuantumSafeHttp::config_ip(const Request& req)
 {
     if (!dispatcher_ || !db_)
         return server_error(req, "Dispatcher or database not configured");
@@ -118,26 +118,39 @@ http::message_generator QuantumSafeHttp::handle_config_ip(const Request& req)
 
     try
     {
-        auto body = boost::json::parse(req.body());
+        const auto& raw_body = req.body();
+        logging::Logger::instance().debug("http",
+            "[API] config_ip raw body (" + std::to_string(raw_body.size()) +
+            " bytes): " + raw_body);
+
+        auto body = boost::json::parse(raw_body);
         auto const& obj = body.as_object();
+
+        if (!obj.contains("sensor_id"))
+            return bad_request(req,
+                R"({"status":"error","message":"Missing required field: sensor_id"})");
+        if (!obj.contains("ip"))
+            return bad_request(req,
+                R"({"status":"error","message":"Missing required field: ip"})");
+
         sensor_id = static_cast<int>(obj.at("sensor_id").as_int64());
-        ip = boost::json::value_to<std::string>(obj.at("ip"));
+        ip = obj.at("ip").as_string().c_str();
     }
     catch (const std::exception& e)
     {
-        return bad_request(req,
-            std::string(R"({"status":"error","message":"Invalid JSON body: )") +
-            e.what() + "\"}");
+        logging::Logger::instance().error("http",
+            "[API] JSON parsing error: " + std::string(e.what()));  
+        return bad_request(req, "Invalid JSON body: " + std::string(e.what()));
     }
 
-    uint64_t request_id = dispatcher_->generate_id();
-
-    logging::Logger::instance().info("http",
-        "[API] CONFIG_IP request | sensor_id=" + std::to_string(sensor_id) +
-        " | ip=" + ip + " | request_id=" + std::to_string(request_id));
-
+    uint64_t request_id = 0;
     try
     {
+        request_id = db_->generate_request_id();
+        logging::Logger::instance().info("http",
+            "[API] Generating request_id | sensor_id=" + std::to_string(sensor_id) +
+            " | ip=" + ip + " | request_id=" + std::to_string(request_id));
+
         db_->add_pending_config(
             sensor_id,
             "sensor-" + std::to_string(sensor_id),
@@ -148,11 +161,10 @@ http::message_generator QuantumSafeHttp::handle_config_ip(const Request& req)
         logging::Logger::instance().error("http",
             "[API] DB error: " + std::string(e.what()));
 
-        boost::json::object err_body = {
-            {"status",     "error"},
-            {"message",    std::string("Database error: ") + e.what()},
-            {"request_id", request_id}
-        };
+        boost::json::object err_body;
+        err_body["status"]     = "error";
+        err_body["message"]    = std::string("Database error: ") + e.what();
+        err_body["request_id"] = static_cast<int64_t>(request_id);
         return server_error(req, boost::json::serialize(err_body));
     }
 
@@ -169,21 +181,19 @@ http::message_generator QuantumSafeHttp::handle_config_ip(const Request& req)
 
     if (status == ResponseStatus::SUCCESS)
     {
-        boost::json::object ok_body = {
-            {"status",     "success"},
-            {"sensor_id",  sensor_id},
-            {"request_id", request_id},
-            {"message",    "Sensor " + std::to_string(sensor_id) + " updated successfully"}
-        };
+        boost::json::object ok_body;
+        ok_body["status"]     = "success";
+        ok_body["sensor_id"]  = sensor_id;
+        ok_body["request_id"] = static_cast<int64_t>(request_id);
+        ok_body["message"]    = "Sensor " + std::to_string(sensor_id) + " updated successfully";
         return success_text(req, boost::json::serialize(ok_body), "application/json");
     }
 
-    boost::json::object fail_body = {
-        {"status",     "error"},
-        {"sensor_id",  sensor_id},
-        {"request_id", request_id},
-        {"message",    status_to_string(status)}
-    };
+    boost::json::object fail_body;
+    fail_body["status"]     = "error";
+    fail_body["sensor_id"]  = sensor_id;
+    fail_body["request_id"] = static_cast<int64_t>(request_id);
+    fail_body["message"]    = status_to_string(status);
 
     http::response<http::string_body> res{
         http::status::service_unavailable, req.version()};

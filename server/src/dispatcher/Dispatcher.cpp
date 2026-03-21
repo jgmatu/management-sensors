@@ -11,9 +11,7 @@ struct Dispatcher::RequestContext {
     bool ready = false;
 };
 
-Dispatcher::Dispatcher() :
-    id_counter(1)
-{}
+Dispatcher::Dispatcher() {}
 
 std::string Dispatcher::status_to_string(ResponseStatus status) {
     switch (status) {
@@ -27,19 +25,6 @@ std::string Dispatcher::status_to_string(ResponseStatus status) {
 }
 
 Dispatcher::~Dispatcher() {}
-
-uint64_t Dispatcher::generate_id()
-{
-    return id_counter.fetch_add(1, std::memory_order_relaxed);
-}
-
-void Dispatcher::set_next_id(uint64_t next_id)
-{
-    if (next_id < 1) {
-        next_id = 1;
-    }
-    id_counter.store(next_id, std::memory_order_relaxed);
-}
 
 ResponseStatus Dispatcher::wait_for_response(uint64_t id, int timeout_ms)
 {

@@ -16,8 +16,15 @@ ${DB_PORT}            5432
 ${DB_NAME}            javi
 ${DB_USER}            javi
 
-${SERVER_CMD}         bash scripts/server.sh
-${HTTPS_SERVER_CMD}   bash scripts/https.sh
+${SERVER_BIN}         ./build/server/server
+${SERVER_CERT}        ./server/certs/server.pem
+${SERVER_KEY}         ./server/certs/server.key
+${SERVER_POLICY}      ./server/policies/pqc_basic.txt
+${SERVER_WEBROOT}     ./server/webroot
+
+${RAW_PORT}           50443
+${HTTPS_PORT}         50444
+
 ${CONTROLLER_CMD}     bash scripts/controller.sh
 ${SENSOR_CMD}         bash scripts/sensor.sh
 
@@ -27,24 +34,28 @@ ${CLI_TIMEOUT}        60s
 
 ${BOTAN_BRIDGE_CMD}   bash tests/scripts/botan.sh
 
-${HTTPS_HOST}         localhost
-${HTTPS_PORT}         50443
 ${API_TIMEOUT}        60s
 
 # Proxy C++ HTTP plano -> TLS PQC (Botan)
-${HTTPS_PROXY_CMD}    bash tests/scripts/https_proxy.sh
 ${PROXY_HOST}         127.0.0.1
 ${PROXY_PORT}         8443
 
 *** Keywords ***
-# ── Infraestructura compartida (DB + controller + sensor) ──
+# ── Infraestructura compartida ──
 
 Iniciar Infraestructura
     Iniciar Base De Datos
     Start Process    ${CONTROLLER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
     Iniciar Sensor
+    Iniciar Servidor Raw
+    Iniciar Servidor HTTPS
+    Iniciar Bridge
+    Iniciar Proxy HTTPS
 
 Parar Infraestructura
+    Parar Proxy HTTPS
+    Parar Bridge
+    Parar Servidores
     Parar Sensor
     Parar Controller
     Parar Base De Datos
@@ -64,19 +75,26 @@ Parar Base De Datos
     Run Process    ${PG_CTL}    -D    ${PG_DATA}    stop
     ...    timeout=10s
 
-# ── Servidor (raw o http) ──
+# ── Servidores ──
 
 Iniciar Servidor Raw
-    Log    Lanzando servidor en modo raw...
-    Start Process    ${SERVER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Esperar Puerto Abierto    ${HTTPS_HOST}    ${HTTPS_PORT}
+    Log    Lanzando servidor en modo raw (puerto ${RAW_PORT})...
+    Start Process
+    ...    ${SERVER_BIN}    --cert    ${SERVER_CERT}    --key    ${SERVER_KEY}
+    ...    --port    ${RAW_PORT}    --mode    raw    --policy    ${SERVER_POLICY}
+    ...    alias=server_raw    stdout=DEVNULL    stderr=DEVNULL
+    Esperar Puerto Abierto    localhost    ${RAW_PORT}
 
 Iniciar Servidor HTTPS
-    Log    Lanzando servidor en modo HTTPS...
-    Start Process    ${HTTPS_SERVER_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
-    Esperar Puerto Abierto    ${HTTPS_HOST}    ${HTTPS_PORT}
+    Log    Lanzando servidor en modo HTTPS (puerto ${HTTPS_PORT})...
+    Start Process
+    ...    ${SERVER_BIN}    --cert    ${SERVER_CERT}    --key    ${SERVER_KEY}
+    ...    --port    ${HTTPS_PORT}    --mode    http    --document-root    ${SERVER_WEBROOT}
+    ...    --policy    ${SERVER_POLICY}
+    ...    alias=server_https    stdout=DEVNULL    stderr=DEVNULL
+    Esperar Puerto Abierto    localhost    ${HTTPS_PORT}
 
-Parar Servidor
+Parar Servidores
     ${user}=    Get Environment Variable    USER
     Run Process
     ...    bash    -lc    "pkill -TERM -u ${user} -f 'build/server/server' || true; sleep 0.3; pkill -KILL -u ${user} -f 'build/server/server' || true"
@@ -86,8 +104,9 @@ Parar Servidor
 # ── Bridge botan (socat + tls_client) ──
 
 Iniciar Bridge
-    Log    Lanzando botan bridge (socat)...
+    Log    Lanzando botan bridge (socat) -> puerto ${RAW_PORT}...
     Start Process    ${BOTAN_BRIDGE_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
+    ...    env:BOTAN_PORT=${RAW_PORT}
     Esperar Puerto Abierto    ${TELNET_HOST}    ${TELNET_PORT}
 
 Parar Bridge
@@ -142,8 +161,10 @@ Esperar Puerto Abierto
 # ── Proxy HTTPS (C++ HTTP plano -> TLS PQC) ──
 
 Iniciar Proxy HTTPS
-    Log    Lanzando proxy C++ HTTP->TLS PQC...
-    Start Process    ${HTTPS_PROXY_CMD}    shell=True    stdout=DEVNULL    stderr=DEVNULL
+    Log    Lanzando proxy C++ HTTP->TLS PQC -> puerto ${HTTPS_PORT}...
+    Start Process    bash    tests/scripts/https_proxy.sh
+    ...    shell=True    stdout=DEVNULL    stderr=DEVNULL
+    ...    env:PROXY_PORT=${PROXY_PORT}    env:BACKEND_PORT=${HTTPS_PORT}
     Esperar Puerto Abierto    ${PROXY_HOST}    ${PROXY_PORT}
 
 Parar Proxy HTTPS
@@ -153,41 +174,41 @@ Parar Proxy HTTPS
     ...    shell=True    timeout=10s    stdout=PIPE    stderr=PIPE
     Sleep    0.5s
 
-# ── Modos compuestos (servidor + proxy/bridge) ──
-
-Iniciar Modo HTTPS
-    Iniciar Servidor HTTPS
-    Iniciar Proxy HTTPS
-
-Parar Modo HTTPS
-    Parar Proxy HTTPS
-    Parar Servidor
-
 # ── HTTPS helpers (curl a través del proxy) ──
 
 HTTPS POST
     [Arguments]    ${path}    ${body}
     ${url}=    Catenate    SEPARATOR=    http://${PROXY_HOST}:${PROXY_PORT}    ${path}
+    Log    [DIAG] HTTPS POST ${url}
+    Log    [DIAG] Body: ${body}
+    Log    [DIAG] Body length: ${{len($body)}}
     ${result}=    Run Process
-    ...    curl    -s    -S    --max-time    30
+    ...    curl    -v    -s    -S    --max-time    30
     ...    -X    POST
     ...    -H    Content-Type: application/json
     ...    -H    Connection: close
     ...    -d    ${body}
     ...    ${url}
     ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
-    Log    HTTPS POST ${path} stdout:\n${result.stdout}
-    Log    HTTPS POST ${path} stderr:\n${result.stderr}
+    Log    [DIAG] curl exit code: ${result.rc}
+    Log    [DIAG] stdout (${${{len($result.stdout)}}} bytes):\n${result.stdout}
+    Log    [DIAG] stderr (curl verbose):\n${result.stderr}
+    Should Be Equal As Integers    ${result.rc}    0
+    ...    curl failed with rc=${result.rc}: ${result.stderr}
     RETURN    ${result.stdout}
 
 HTTPS GET
     [Arguments]    ${path}
     ${url}=    Catenate    SEPARATOR=    http://${PROXY_HOST}:${PROXY_PORT}    ${path}
+    Log    [DIAG] HTTPS GET ${url}
     ${result}=    Run Process
-    ...    curl    -s    -S    --max-time    30
+    ...    curl    -v    -s    -S    --max-time    30
     ...    -H    Connection: close
     ...    ${url}
     ...    stdout=PIPE    stderr=PIPE    timeout=${API_TIMEOUT}
-    Log    HTTPS GET ${path} stdout:\n${result.stdout}
-    Log    HTTPS GET ${path} stderr:\n${result.stderr}
+    Log    [DIAG] curl exit code: ${result.rc}
+    Log    [DIAG] stdout (${${{len($result.stdout)}}} bytes):\n${result.stdout}
+    Log    [DIAG] stderr (curl verbose):\n${result.stderr}
+    Should Be Equal As Integers    ${result.rc}    0
+    ...    curl failed with rc=${result.rc}: ${result.stderr}
     RETURN    ${result.stdout}

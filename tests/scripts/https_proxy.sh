@@ -12,7 +12,7 @@ PROXY_PORT="${PROXY_PORT:-8443}"
 PROXY_BIN="${REPO_ROOT}/build/proxy/proxy"
 
 BOTAN_HOST="localhost"
-BOTAN_PORT=50443
+BOTAN_PORT="${BACKEND_PORT:-50444}"
 
 CA_CERT="${REPO_ROOT}/server/certs/ca.pem"
 POLICY="${REPO_ROOT}/server/policies/pqc_basic.txt"

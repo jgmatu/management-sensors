@@ -12,7 +12,7 @@ LOG_FILE="${REPO_ROOT}/logs/botan_cli_bridge.log"
 
 # Botan TLS client target (tu server TLS)
 BOTAN_HOST="localhost"
-BOTAN_PORT=50443
+BOTAN_PORT="${BOTAN_PORT:-50443}"
 
 BOTAN_POLICY="${REPO_ROOT}/server/policies/client_policies.txt"
 BOTAN_CERTS="${REPO_ROOT}/server/certs/ca.pem"

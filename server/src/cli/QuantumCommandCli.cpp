@@ -64,7 +64,7 @@ void QuantumCommandCli::register_commands()
 {
     command_registry_ = {
         {"CONFIG_IP", [this](const QuantumCommand& sc) -> std::string {
-            uint64_t request_id = dispatcher_.generate_id();
+            uint64_t request_id = db_->generate_request_id();
 
             logging::Logger::instance().info(
                 "server",

@@ -1,13 +1,11 @@
 *** Settings ***
 Documentation     HTTPS REST API E2E: verifica endpoints REST sobre TLS v1.3 PQC.
-...               Robot envía HTTP plano al proxy (socat + botan tls_client)
-...               que reenvía por TLS al servidor HTTPS.
+...               Robot envía HTTP plano al proxy C++ que reenvía por TLS PQC
+...               al servidor HTTPS (puerto ${HTTPS_PORT}).
 Library           Process
 Library           OperatingSystem
 Resource          ../resources/common.resource
 
-Suite Setup       Iniciar Modo HTTPS
-Suite Teardown    Parar Modo HTTPS
 Test Setup        Preparar Caso Integración
 
 *** Test Cases ***

@@ -287,7 +287,7 @@ void DatabaseManager::add_pending_config(int sensor_id,
     }
 }
 
-uint64_t DatabaseManager::get_next_request_id_seed()
+void DatabaseManager::init_request_id_sequence()
 {
     std::lock_guard<std::mutex> lock(conn_mutex_);
 
@@ -298,25 +298,49 @@ uint64_t DatabaseManager::get_next_request_id_seed()
     try
     {
         pqxx::work txn(*connection_queries_);
-        auto res = txn.exec(
-            "SELECT COALESCE(GREATEST("
+
+        txn.exec("CREATE SEQUENCE IF NOT EXISTS request_id_seq;");
+
+        txn.exec(
+            "SELECT setval('request_id_seq', COALESCE(GREATEST("
                 "(SELECT MAX(request_id)::BIGINT FROM sensor_config_pending), "
                 "(SELECT MAX(request_id)::BIGINT FROM sensor_config)"
-            "), 0)::BIGINT + 1 AS next_request_id;"
+            "), 0));"
         );
+
         txn.commit();
 
-        if (res.empty() || res[0][0].is_null()) {
-            return 1;
-        }
+        logging::Logger::instance().info("db",
+            "[DB] request_id_seq initialized");
+    }
+    catch (const std::exception& e)
+    {
+        logging::Logger::instance().error("db",
+            "[DB] Failed to init request_id_seq: " + std::string(e.what()));
+        throw;
+    }
+}
+
+uint64_t DatabaseManager::generate_request_id()
+{
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+
+    if (!connection_queries_ || !connection_queries_->is_open()) {
+        throw std::runtime_error("Database connection lost.");
+    }
+
+    try
+    {
+        pqxx::work txn(*connection_queries_);
+        auto res = txn.exec("SELECT nextval('request_id_seq');");
+        txn.commit();
+
         return static_cast<uint64_t>(res[0][0].as<long long>());
     }
     catch (const std::exception& e)
     {
-        logging::Logger::instance().error(
-            "db",
-            "[DB] Failed to compute next request_id seed: " + std::string(e.what())
-        );
+        logging::Logger::instance().error("db",
+            "[DB] Failed to generate request_id: " + std::string(e.what()));
         throw;
     }
 }
