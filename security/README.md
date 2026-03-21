@@ -451,3 +451,161 @@ Never connect with the `postgres` superuser in production.
 | **P2 - Medium** | DB connection security (DBPOL-01..07) | Defence in depth |
 | **P3 - Low** | Log injection (LOG-02) | Forensic integrity |
 | **P3 - Low** | CSRF (CSRF-01..02) | Requires user interaction |
+
+---
+
+## 11. CCN-STIC-812: Web Security Design and Methodology (ENS)
+
+Reference: *CCN-STIC-812 -- Seguridad en Entornos y Aplicaciones Web*
+(Centro Criptologico Nacional, Esquema Nacional de Seguridad).
+
+This section summarizes the design principles and testing methodology
+prescribed by the Spanish National Cryptologic Centre for web application
+security. Only the abstraction layers are included here; procedural details
+are deferred to the full standard.
+
+### 11.1 Security Strategy Components
+
+The STIC-812 strategy requires all of the following elements working together:
+
+| Component | Description |
+|---|---|
+| **Security training** | Administrators and developers must understand web attack techniques and defences through practical examples. |
+| **Secure architecture** | Three-tier separation (web server, application server, database), WAF between tiers, IDS at perimeter. |
+| **Secure SDLC** | Security integrated into the software development lifecycle (CLASP/OWASP), not added post-deployment. |
+| **Black-box analysis** | External penetration testing simulating an attacker with no prior knowledge. |
+| **White-box analysis** | Internal code review for vulnerable functions, missing validations, and insecure patterns. |
+| **Incident response** | Defined procedures, responsibilities, and coordination with CCN-CERT. |
+
+### 11.2 Vulnerability Abstractions (OWASP/STIC-812)
+
+The standard identifies these as the primary web vulnerability classes:
+
+| Abstraction | Attack Surface | Defence |
+|---|---|---|
+| **XSS (Cross-Site Scripting)** | Unvalidated user data reflected/stored in HTML output | Input normalization + output encoding; CSP headers |
+| **SQL Injection** | User input passed to SQL interpreter without parameterization | Parameterized queries (prepared statements); centralized filtering library |
+| **CSRF (Cross-Site Request Forgery)** | Pre-authenticated browser sessions exploited by external pages | Anti-CSRF tokens per session/form; SameSite cookies; CAPTCHA on critical actions |
+| **Remote File Inclusion (RFI)** | User-controlled file paths accepted by the application | Whitelist allowed paths; disable remote includes |
+| **Insecure Direct Object References** | Internal IDs (files, DB records) exposed in URLs or forms | Access control checks on every reference; indirect mapping |
+| **Information Leakage** | Detailed error messages, stack traces, version banners | Custom error pages; suppress server/framework banners |
+| **Broken Authentication** | Weak credentials, predictable session tokens, no lockout | Cryptographic session IDs; lockout policy; MFA |
+| **Insecure Cryptographic Storage** | Plaintext secrets in database or config files | Hash credentials (bcrypt/argon2); encrypt sensitive data at rest |
+| **Insecure Communications** | HTTP for sensitive data; weak TLS configurations | Enforce HTTPS/TLS 1.3; HSTS; disable legacy protocols |
+| **Failure to Restrict URL Access** | Authorization bypassed by directly requesting hidden URLs | Server-side access control on every endpoint; deny by default |
+
+### 11.3 Input Filtering Design (Defence in Depth)
+
+The standard mandates a centralized filtering library applied to all user
+input before processing:
+
+1. **Normalize first, filter second** -- Convert all encodings (URL hex,
+   Unicode, HTML entities) to a canonical form before applying filters.
+2. **Whitelist model preferred** -- Accept only known-valid characters for
+   each field type rather than blacklisting known-bad patterns.
+3. **Filter at both layers** -- Client-side validation for UX; server-side
+   validation as the authoritative enforcement. Client-side alone is never
+   sufficient.
+4. **Centralized library** -- One shared module for all filtering functions
+   (XSS, SQLi, path traversal, command injection, HTTP response splitting).
+   All application entry points must route through this library.
+
+Filtering categories:
+
+| Category | Characters / Patterns to control |
+|---|---|
+| XSS | `<script>`, `<iframe>`, `<img src=`, event handlers (`onerror`, `onload`), `<`, `>`, `"`, `'`, `&`, `;` and their encoded forms |
+| SQL Injection | `'`, `"`, `;`, `--`, `#`, `/*`, `*/`, `%`, `_`, `OR`, `UNION`, `SELECT`, `INSERT`, `DROP`, `CHAR()`, hex encodings |
+| Path Traversal | `..`, `/`, `\`, `%c0%af`, `%c1%9c`, `%255c` (Unicode/double-encoding variants) |
+| Command Injection | `;`, `>`, `<`, `\|`, `&`, `` ` `` |
+| HTTP Response Splitting | `\r` (CR), `\n` (LF), `\r\n` (CRLF) |
+| LDAP / XPath | `&`, `\|`, `!`, `*`, `(`, `)`, `<=`, `>=`, `~=` |
+
+### 11.4 Secure Architecture (Three-Tier Model)
+
+The standard prescribes a three-tier architecture for web applications,
+which maps to our system as follows:
+
+| STIC-812 Tier | Our System | Security Requirement |
+|---|---|---|
+| **Web Server** | QuantumSafeTlsEngine + QuantumSafeHttp | TLS v1.3 PQC termination; WAF filtering; input validation |
+| **Application Server** | Dispatcher + CLI/HTTP handlers | Business logic isolation; no direct DB access from transport layer |
+| **Database** | PostgreSQL | Encrypted connections (sslmode=verify-full); least-privilege roles; parameterized queries only |
+
+Additional STIC-812 requirements:
+
+- WAF between each tier (at minimum, between external clients and web server).
+- IDS/IPS at network perimeter monitoring TLS-terminated traffic.
+- All inter-tier communications encrypted and authenticated.
+- Ingress and egress filtering on all perimeter firewalls.
+- Documented credentials and permissions for every component-to-component
+  interaction.
+
+### 11.5 Testing Methodology (Black-Box Phases)
+
+The standard defines three sequential phases for external security audits:
+
+**Phase 1 -- Reconnaissance**
+- DNS records, WHOIS, domain registration
+- Search engine information leakage (Google Hacking / dorking)
+- Full sitemap generation (static and dynamic content)
+- Network topology and perimeter device identification
+
+**Phase 2 -- Scanning**
+- TCP/UDP port enumeration on all exposed hosts
+- Service fingerprinting (web server, application framework, database)
+- OS fingerprinting
+- SSL/TLS configuration analysis (versions, ciphers, certificates, CA chain)
+- HTTP method enumeration (especially TRACE -> XST)
+- Identification of default resources and administrative interfaces
+
+**Phase 3 -- Vulnerability Analysis**
+- Input parameter testing against all dynamic endpoints for: SQLi, blind SQLi,
+  XSS (reflected + stored), CSRF, HTTP response splitting, command injection,
+  path traversal, file inclusion, buffer overflow, CAPTCHA bypass
+- Authentication mechanism analysis: credential strength, lockout policy,
+  enumeration resistance, session token entropy and lifecycle
+- Session management: token format, expiration, fixation, hijacking, cookie
+  flags (Secure, HttpOnly, SameSite)
+- Access control: ACL enforcement, privilege escalation, direct URL access
+- Load testing / DoS (optional): single-client and distributed, resource
+  exhaustion, account lockout flooding
+
+**White-Box (Code Review) Areas**:
+- Buffer overflows
+- OS command injection
+- SQL injection in dynamic queries
+- Input validation completeness
+- XSS and CSRF protection
+- Error handling and information disclosure
+- Authentication and session management
+- Authorization checks
+- Cryptographic usage (storage and transit)
+- Race conditions
+- Log management
+
+### 11.6 Audit Results Requirements (STIC-812 Section 5)
+
+All security audit results must satisfy:
+
+| Requirement | Description |
+|---|---|
+| **Completeness** | Reflects the real and full security state of all web services, regardless of technology |
+| **Relevance** | Demonstrates practical impact on Availability, Integrity, Confidentiality, Authenticity, and Traceability |
+| **Confidentiality** | All auditors under NDA with financial penalties; full personnel disclosure |
+| **Reproducibility** | All findings accompanied by evidence: captured pages, PCAP files, vulnerable URL lists, timestamps |
+| **Classification** | Vulnerabilities listed and ranked by criticality |
+
+### 11.7 References
+
+- CCN-STIC-812 v1.0 -- Seguridad en Entornos y Aplicaciones Web (ENS)
+- CCN-STIC-661 -- Seguridad en Firewalls de Aplicacion
+- CCN-STIC-408 -- Seguridad Perimetral - Cortafuegos
+- CCN-STIC-432 -- Seguridad Perimetral - IDS
+- CCN-STIC-810 -- Creacion de CERTs
+- CCN-STIC-817 -- Gestion de Incidentes de Seguridad en el ENS
+- CCN-STIC-818 -- Herramientas de Seguridad
+- OWASP Top 10
+- OWASP CLASP (Comprehensive, Lightweight Application Security Process)
+- OWASP Secure Software Contract Annex
+- WASC -- Web Application Security Consortium (WHID database)
